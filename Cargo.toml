@@ -1,0 +1,30 @@
+[package]
+name = "sol-gate"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["sqlite"]
+sqlite = ["sqlx/sqlite"]
+postgres = ["sqlx/postgres"]
+
+[dependencies]
+hyper = { version = "0.14", features = ["full"] }
+hyper-tls = "0.5.0"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.82"
+toml = "0.5"
+platform-dirs = "0.3.0"
+clap = { version = "3.0", features = ["derive"] }
+itertools = "0.9.0"
+sha2 = "~0.10.0"
+iced = "0.4.2"
+native-dialog = "0.6"
+hex = {version = "0.4", features=["serde"]}
+sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls", "offline", "migrate"] } 
+include_dir = "0.7"
+chrono = "0.4"
+reqwest= "0.11"
