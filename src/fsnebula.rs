@@ -37,7 +37,6 @@ pub struct FSNebula {
     cache: PathBuf,
 }
 
-pub enum InitError {}
 
 impl FSNebula {
     pub async fn init(urls: FSNPaths, appdir: PathBuf) -> Result<Self, Error> {
@@ -49,7 +48,7 @@ impl FSNebula {
             Ok(val) => val,
             Err(e) => String::default(),
         };
-        let mods_json: Option<String> = None;
+        let mut mods_json: Option<String> = None;
         for repo_url in urls.repos.iter() {
             let req_result = client
                 .get(repo_url)
@@ -67,7 +66,7 @@ impl FSNebula {
                             None => (),
                         }
                         mods_json = Some(response.text().await.unwrap());
-                        tokio::fs::write(&cache.join("mods.json"), &mods_json.unwrap()).await.unwrap();
+                        tokio::fs::write(&cache.join("mods.json"), mods_json.as_ref().unwrap()).await.unwrap();
                         break;
                     }
                     StatusCode::NOT_MODIFIED => {
@@ -80,10 +79,13 @@ impl FSNebula {
                 },
             }
         }
-        let repo: mods::Repo = match serde_json::from_str(&mods_json) {
-            Ok(x) => x,
-            Err(_) => todo!(),
-        };
-        Ok(Self { repo, urls, cache })
+        match mods_json {
+            Some(json_str) => match serde_json::from_str(&json_str) {
+                Ok(repo) => Ok(Self { repo, urls, cache }),
+                Err(e) => todo!()
+            },
+            None => todo!(),
+        }
+        
     }
 }

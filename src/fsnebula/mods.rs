@@ -104,7 +104,7 @@ impl<'de> Visitor<'de> for ChecksumVisitor {
     type Value = FSNChecksum;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("list of 2 strings")
+        formatter.write_str("expected list of 2 strings")
     }
     // fsnebula form
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>

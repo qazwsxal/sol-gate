@@ -1,3 +1,3 @@
 use sqlx::migrate::Migrator;
-
-static SQLITE: Migrator = sqlx::migrate!("./migrate/");
+use sqlx;
+//static MIG: Migrator = sqlx::migrate!();

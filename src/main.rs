@@ -9,7 +9,6 @@ use std::process::exit;
 mod cli;
 mod common;
 mod config;
-mod db;
 mod fsnebula;
 
 #[tokio::main]
