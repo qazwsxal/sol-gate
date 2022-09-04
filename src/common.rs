@@ -2,7 +2,6 @@ use hex;
 use serde::{Deserialize, Deserializer, Serialize};
 pub mod db;
 
-
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Mod {
     pub id: String,

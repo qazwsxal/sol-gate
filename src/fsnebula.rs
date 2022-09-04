@@ -1,13 +1,15 @@
 use crate::common;
 use crate::config;
+use axum::Router;
 use hyper::header::{ETAG, IF_NONE_MATCH};
 use hyper::StatusCode;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::io::Error;
+use std::fmt;
 use std::path::PathBuf;
 
 pub mod mods;
+pub mod router;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct FSNPaths {
@@ -37,17 +39,45 @@ pub struct FSNebula {
     cache: PathBuf,
 }
 
+#[derive(Debug)]
+pub enum InitError {
+    IOError(std::io::Error),
+    ParseError(serde_json::Error),
+    RequestError(reqwest::Error),
+}
+impl fmt::Display for InitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", &self)
+    }
+}
+impl std::error::Error for InitError {}
+impl From<serde_json::Error> for InitError {
+    fn from(err: serde_json::Error) -> Self {
+        InitError::ParseError(err)
+    }
+}
+
+impl From<std::io::Error> for InitError {
+    fn from(err: std::io::Error) -> Self {
+        InitError::IOError(err)
+    }
+}
+
+impl From<reqwest::Error> for InitError {
+    fn from(err: reqwest::Error) -> Self {
+        InitError::RequestError(err)
+    }
+}
 
 impl FSNebula {
-    pub async fn init(urls: FSNPaths, appdir: PathBuf) -> Result<Self, Error> {
+    pub async fn init(urls: FSNPaths, appdir: PathBuf) -> Result<Self, InitError> {
         let cache = appdir.join("fsnebula");
-        tokio::fs::create_dir_all(&cache).await.unwrap();
+        tokio::fs::create_dir_all(&cache).await?;
         let client = reqwest::Client::new();
         let etag_path = cache.join("mods.json.etag");
-        let etag = match tokio::fs::read_to_string(&etag_path).await {
-            Ok(val) => val,
-            Err(e) => String::default(),
-        };
+        let etag: String = tokio::fs::read_to_string(&etag_path)
+            .await
+            .unwrap_or_else(|_| String::default());
         let mut mods_json: Option<String> = None;
         for repo_url in urls.repos.iter() {
             let req_result = client
@@ -56,36 +86,33 @@ impl FSNebula {
                 .send()
                 .await;
             match req_result {
-                Err(_) => continue, // Try repo.json url
+                Err(_) => continue, // Try next repo.json url
                 Ok(response) => match response.status() {
                     StatusCode::OK => {
                         match response.headers().get(ETAG) {
-                            Some(tag) => tokio::fs::write(&etag_path, tag.to_str().unwrap())
-                                .await
-                                .unwrap(),
+                            Some(tag) => {
+                                tokio::fs::write(&etag_path, tag.to_str().unwrap()).await?
+                            }
                             None => (),
                         }
-                        mods_json = Some(response.text().await.unwrap());
-                        tokio::fs::write(&cache.join("mods.json"), mods_json.as_ref().unwrap()).await.unwrap();
+                        let resp = response.text().await?;
+                        tokio::fs::write(&cache.join("mods.json"), &resp).await?;
+                        mods_json = Some(resp);
                         break;
                     }
-                    StatusCode::NOT_MODIFIED => {
-                        mods_json = Some(tokio::fs::read_to_string(cache.join("mods.json"))
-                            .await
-                            .unwrap());
-                        break;
-                    }
-                    _ => todo!(),
+                    StatusCode::NOT_MODIFIED => break,
+                    _ => continue,
                 },
+                _ => continue,
             }
         }
-        match mods_json {
-            Some(json_str) => match serde_json::from_str(&json_str) {
-                Ok(repo) => Ok(Self { repo, urls, cache }),
-                Err(e) => todo!()
-            },
-            None => todo!(),
+        if mods_json.is_none() {
+            mods_json = Some(tokio::fs::read_to_string(cache.join("mods.json")).await?);
         }
-        
+        Ok(Self {
+            repo: serde_json::from_str(&mods_json.unwrap())?,
+            urls,
+            cache,
+        })
     }
 }

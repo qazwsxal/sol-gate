@@ -154,7 +154,8 @@ impl From<FSNMod> for common::Item {
                 builds: fsn_mod
                     .packages
                     .iter()
-                    .map(|p| common::Build::from(p.clone()))
+                    .cloned()
+                    .map(|p| common::Build::from(p))
                     .collect(),
             }),
             _ => Self::Mod(common::Mod {
