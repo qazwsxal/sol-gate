@@ -51,14 +51,13 @@ async fn modlist(Extension(fsnebula): Extension<Arc<FSNebula>>) -> String {
 }
 
 async fn modinfo(Path(id): Path<String>, Extension(fsnebula): Extension<Arc<FSNebula>>) -> String {
-    let mods: Option<ShortMod> = fsnebula
+    let mods: Option<FSNMod> = fsnebula
         .repo
         .mods
         .iter()
         .filter(|m| m.id == id)
         .sorted_by(|a, b| Ord::cmp(&a.last_update, &b.last_update))
-        .cloned()
-        .map(|m: FSNMod| ShortMod::from(m))
-        .last();
+        .last()
+        .cloned();
     serde_json::to_string(&mods).unwrap()
 }
