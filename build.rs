@@ -14,5 +14,6 @@ fn main() {
 
     // Can't pass --prefix to npm.cmd for some reason, so cd to where the frontend's based
     env::set_current_dir("frontend").unwrap();
+    Command::new(NPM).args(["install"]).status().unwrap();
     Command::new(NPM).args(["run", "build"]).status().unwrap();
 }
