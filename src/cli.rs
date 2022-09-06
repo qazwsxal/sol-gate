@@ -11,22 +11,8 @@ pub struct Cli {
     #[clap(short, long, action = clap::ArgAction::Count)]
     pub debug: u8,
 
-    #[clap(subcommand)]
-    pub command: Option<Commands>,
-}
-
-#[derive(Subcommand)]
-pub enum Commands {
-    Launch {
-        #[clap(value_parser, value_name = "MOD NAME")]
-        name: String,
-        #[clap(short, long, value_name = "MOD VERSION")]
-        version: Option<String>,
-    },
-    Fetch {
-        #[clap(value_parser, value_name = "MOD NAME")]
-        name: String,
-        #[clap(short, long, value_name = "MOD VERSION")]
-        version: Option<String>,
-    },
+    #[clap(short, long)]
+    pub ip: Option<String>,
+    #[clap(short, long)]
+    pub port: Option<u16>,
 }
