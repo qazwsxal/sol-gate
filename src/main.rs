@@ -2,7 +2,7 @@ use axum::{
     self,
     body::{boxed, Empty, Full},
     extract::Path,
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
 };
@@ -46,23 +46,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     //TODO: Actually add API endpoints
     let app = axum::Router::new()
-        .route("/ui/*path", get(static_path))
+        .fallback(get(frontend))
         .nest("/api", api_router);
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
 
     let server = tokio::spawn(async move {
         axum::Server::bind(&addr)
             .serve(app.into_make_service())
             .await
     });
-    open::that("http://127.0.0.1:3000/ui/")?;
+    open::that("http://127.0.0.1:3000/")?;
     let (_result,) = tokio::join!(server);
     Ok(())
 }
 
-async fn static_path(Path(path): Path<String>) -> impl IntoResponse {
-    let path = match path.trim_start_matches('/') {
+async fn frontend(uri: Uri) -> impl IntoResponse {
+    // Ugly "no path means index.html" hack
+    let path = match uri.path().trim_start_matches("/") {
         "" => "index.html",
         x => x
     };
