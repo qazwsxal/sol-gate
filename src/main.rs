@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate simple_error;
 use axum::{
     self,
     body::{boxed, Empty, Full},
@@ -65,7 +67,7 @@ async fn frontend(uri: Uri) -> impl IntoResponse {
     // Ugly "no path means index.html" hack
     let path = match uri.path().trim_start_matches("/") {
         "" => "index.html",
-        x => x
+        x => x,
     };
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
     let file = FRONTEND_DIR.get_file(path);
@@ -84,24 +86,3 @@ async fn frontend(uri: Uri) -> impl IntoResponse {
             .unwrap(),
     }
 }
-//     let fsn = fsnebula::FSNebula::init(config.fsnebula, config::default_dir())
-//         .await
-//         .unwrap();
-//     let repo = fsn.repo;
-//     let files: Vec<fsnebula::mods::FSNModFile> = repo
-//         .mods
-//         .iter()
-//         .flat_map(|f: &fsnebula::mods::FSNMod| &(f.packages))
-//         .flat_map(|f: &fsnebula::mods::FSNPackage| f.filelist.clone())
-//         .collect::<Vec<fsnebula::mods::FSNModFile>>();
-//     let checksums: Vec<fsnebula::mods::FSNChecksum> = files
-//         .iter()
-//         .map(|f| f.checksum.clone())
-//         .unique()
-//         .collect::<Vec<fsnebula::mods::FSNChecksum>>();
-//     println!(
-//         "{num_files} files present\n{num_unique} unique.",
-//         num_files = files.len(),
-//         num_unique = checksums.len()
-//     );
-// }

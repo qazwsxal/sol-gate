@@ -1,6 +1,3 @@
-use crate::common;
-use crate::config;
-use axum::Router;
 use hyper::header::{ETAG, IF_NONE_MATCH};
 use hyper::StatusCode;
 use reqwest;
@@ -8,10 +5,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 
-pub mod mods;
+mod db;
 pub mod router;
+pub mod structs;
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct FSNPaths {
     pub web: String,
     pub api: String,
@@ -34,7 +32,7 @@ impl Default for FSNPaths {
 
 #[derive(Debug, Default)]
 pub struct FSNebula {
-    pub repo: mods::Repo,
+    pub repo: structs::Repo,
     urls: FSNPaths,
     cache: PathBuf,
 }

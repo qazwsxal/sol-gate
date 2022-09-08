@@ -1,7 +1,12 @@
 use hex;
 use serde::{Deserialize, Deserializer, Serialize};
+use sqlx::{sqlite::SqliteArgumentValue, Type};
+use std::{
+    borrow::Cow,
+    fmt::{Debug, Display},
+};
 pub mod db;
-
+pub mod router;
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Mod {
     pub id: String,
@@ -16,13 +21,24 @@ pub struct Mod {
     pub packages: Vec<Package>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ModType {
     Engine,
     Mod,
     TC,
 }
+
+impl Display for ModType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Engine => "engine",
+            Self::Mod => "mod",
+            Self::TC => "tc",
+        })
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Engine {
     pub id: String,
@@ -75,7 +91,7 @@ pub struct X86features {
     avx2: bool,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Stability {
     Stable,
@@ -88,7 +104,7 @@ pub enum Item {
     Engine(Engine),
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Package {
     pub name: String,
     pub notes: String,
@@ -102,20 +118,20 @@ pub struct Package {
     pub filelist: Vec<ModFile>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Dependency {
     pub id: String,
     pub version: Option<String>,
     pub packages: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Executable {
     pub file: String,
     pub label: ExeType,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub enum ExeType {
     Release,
     FastDbg,
@@ -128,7 +144,7 @@ pub enum ExeType {
     QtFredFullDbg,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct ZipFile {
     pub filename: String,
     pub dest: String,
@@ -137,7 +153,7 @@ pub struct ZipFile {
     pub urls: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct ModFile {
     pub filename: String,
     pub archive: String,

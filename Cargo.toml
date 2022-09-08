@@ -29,3 +29,8 @@ mime_guess = "2.0"
 tower = {version = "0.4"}
 tower-http = {version = "0.3", features = ["add-extension", "auth", "compression-gzip", "trace"]}
 open = "3.0"
+simple-error = "0.2.3"
+
+
+[profile.release]
+debug = 1

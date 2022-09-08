@@ -2,20 +2,20 @@ use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
-use crate::common::{self, ModType};
+use crate::common::{self, ModType, Stability};
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default, PartialEq)]
 pub struct Repo {
     pub mods: Vec<FSNMod>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNMod {
     pub id: String,
     pub title: String,
     pub version: String,
     pub private: bool,
-    pub stability: Option<common::Stability>,
+    pub stability: Option<Stability>,
     pub parent: Option<String>,
     pub description: String,
     pub logo: Option<String>,
@@ -35,7 +35,7 @@ pub struct FSNMod {
     pub packages: Vec<FSNPackage>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNPackage {
     pub name: String,
     pub notes: String,
@@ -49,29 +49,29 @@ pub struct FSNPackage {
     pub filelist: Vec<FSNModFile>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNDependency {
     pub id: String,
     pub version: Option<String>,
     pub packages: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNExecutable {
     pub file: String,
     pub label: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNZipFile {
     pub filename: String,
     pub dest: String,
     pub checksum: FSNChecksum,
-    pub filesize: usize,
+    pub filesize: i64,
     pub urls: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct FSNModFile {
     pub filename: String,
     pub archive: String,
@@ -80,11 +80,8 @@ pub struct FSNModFile {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
-
 pub enum FSNChecksum {
     SHA256(String),
-    SHA512(String), // doesn't exist but w/e, don't know if we should bother supporting other types,
-                    // unlikely to see an update to cover more of them
 }
 
 // Need a custom Deserializer as Checksum is a list and not a map, i.e:
@@ -119,7 +116,7 @@ impl<'de> Visitor<'de> for ChecksumVisitor {
             .ok_or_else(|| de::Error::invalid_length(1, &self))?;
         match hash_type {
             "sha256" => Ok(Self::Value::SHA256(hash_val.to_string())),
-            "sha512" => Ok(Self::Value::SHA512(hash_val.to_string())),
+            //"sha512" => Ok(Self::Value::SHA512(hash_val.to_string())),
             _ => Err(de::Error::custom(format!(
                 "{hash_type} not recognised",
                 hash_type = hash_type

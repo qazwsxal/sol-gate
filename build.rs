@@ -16,4 +16,8 @@ fn main() {
     env::set_current_dir("frontend").unwrap();
     Command::new(NPM).args(["install"]).status().unwrap();
     Command::new(NPM).args(["run", "build"]).status().unwrap();
+
+    // Rerun on sqlx migrations changing
+    println!("cargo:rerun-if-changed=src/common/migrations");
+    println!("cargo:rerun-if-changed=src/fsnebula/migrations");
 }
