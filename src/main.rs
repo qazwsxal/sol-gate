@@ -51,14 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fallback(get(frontend))
         .nest("/api", api_router);
 
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 4000));
 
     let server = tokio::spawn(async move {
         axum::Server::bind(&addr)
             .serve(app.into_make_service())
             .await
     });
-    open::that("http://127.0.0.1:3000/")?;
+    open::that("http://127.0.0.1:4000/")?;
     let (_result,) = tokio::join!(server);
     Ok(())
 }

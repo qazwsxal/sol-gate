@@ -1,6 +1,7 @@
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
+use hex;
 
 use crate::common::{self, ModType, Stability};
 
@@ -81,7 +82,7 @@ pub struct FSNModFile {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Hash)]
 pub enum FSNChecksum {
-    SHA256(String),
+    SHA256(Vec<u8>),
 }
 
 // Need a custom Deserializer as Checksum is a list and not a map, i.e:
@@ -115,7 +116,7 @@ impl<'de> Visitor<'de> for ChecksumVisitor {
             .next_element()?
             .ok_or_else(|| de::Error::invalid_length(1, &self))?;
         match hash_type {
-            "sha256" => Ok(Self::Value::SHA256(hash_val.to_string())),
+            "sha256" => Ok(Self::Value::SHA256(hex::decode(hash_val).unwrap())),
             //"sha512" => Ok(Self::Value::SHA512(hash_val.to_string())),
             _ => Err(de::Error::custom(format!(
                 "{hash_type} not recognised",
