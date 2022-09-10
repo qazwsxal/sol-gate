@@ -1,7 +1,7 @@
+use hex;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
-use hex;
 
 use crate::common::{self, ModType, Stability};
 

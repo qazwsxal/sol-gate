@@ -42,16 +42,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         },
     };
-    let api_router = axum::Router::new().nest(
-        "/fsn",
-        fsnebula::router::router(config.fsnebula, config::default_dir()).await?,
-    );
+    let fsn_router = fsnebula::router::router(config.fsnebula, config::default_dir()).await?;
+    let api_router = axum::Router::new().nest("/fsn", fsn_router);
     //TODO: Actually add API endpoints
     let app = axum::Router::new()
         .fallback(get(frontend))
         .nest("/api", api_router);
 
-    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 4000));
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 4000)); // User configurable?
 
     let server = tokio::spawn(async move {
         axum::Server::bind(&addr)
