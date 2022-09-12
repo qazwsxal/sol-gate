@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
-use std::sync::Arc;
+
 
 use axum::{
     self,
@@ -15,9 +15,7 @@ use itertools::Itertools;
 use reqwest::header::{ETAG, IF_NONE_MATCH};
 use serde_json;
 use sqlx::{
-    migrate::{MigrateError, Migrator},
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
-    SqlitePool, Transaction,
+    SqlitePool,
 };
 use tokio::task::JoinError;
 use tower::ServiceBuilder;
@@ -25,11 +23,10 @@ use tower::ServiceBuilder;
 use super::{
     db,
     structs::{FSNChecksum, FSNMod, Repo},
-    FSNPaths, FSNebula,
+    FSNPaths,
 };
 use crate::common::{
-    router::{internal_error, internal_error_dyn},
-    ModType, Stability,
+    router::{internal_error_dyn},
 };
 
 pub async fn router(urls: FSNPaths, appdir: PathBuf) -> Result<Router, Box<dyn Error>> {

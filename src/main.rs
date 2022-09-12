@@ -3,7 +3,6 @@ extern crate simple_error;
 use axum::{
     self,
     body::{boxed, Empty, Full},
-    extract::Path,
     http::{header, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
@@ -12,9 +11,9 @@ use axum::{
 use clap::Parser;
 
 use include_dir::{include_dir, Dir};
-use itertools::Itertools;
+
 use open;
-use std::io::{self, ErrorKind};
+use std::io::{ErrorKind};
 use std::path::PathBuf;
 use std::process::exit;
 
