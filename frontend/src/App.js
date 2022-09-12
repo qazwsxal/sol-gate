@@ -53,22 +53,22 @@ function App() {
   return (
     <div className="App">
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-  <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
-    <Tab label="Item One" {...a11yProps(0)} />
-    <Tab label="FSNebula" {...a11yProps(1)} />
-    <Tab label="Settings" {...a11yProps(2)} />
-  </Tabs>
-</Box>
-<TabPanel value={value} index={0}>
-  Item One
-</TabPanel>
+        <Tabs value={value} onChange={handleChange} aria-label="basic tabs example">
+          <Tab label="Installed" {...a11yProps(0)} />
+          <Tab label="FSNebula" {...a11yProps(1)} />
+          <Tab label="Settings" {...a11yProps(2)} />
+        </Tabs>
+      </Box>
+      <TabPanel value={value} index={0}>
+        Installed
+      </TabPanel>
 
-<TabPanel value={value} index={1}>
-  <FSNebula></FSNebula>
-</TabPanel>
-<TabPanel value={value} index={2}>
-  Settings
-</TabPanel>
+      <TabPanel value={value} index={1}>
+        <FSNebula></FSNebula>
+      </TabPanel>
+      <TabPanel value={value} index={2}>
+        Settings
+      </TabPanel>
     </div>
   );
 }
