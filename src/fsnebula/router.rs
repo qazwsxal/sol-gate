@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error};
 use std::fmt;
 use std::path::PathBuf;
 
@@ -9,9 +9,10 @@ use axum::{
     http::StatusCode,
     routing::get,
     Router,
+    Json,
+
 };
 
-use itertools::Itertools;
 use reqwest::header::{ETAG, IF_NONE_MATCH};
 use serde_json;
 use sqlx::{
@@ -25,9 +26,6 @@ use super::{
     structs::{FSNChecksum, FSNMod, Repo},
     FSNPaths,
 };
-use crate::common::{
-    router::{internal_error_dyn},
-};
 
 pub async fn router(urls: FSNPaths, appdir: PathBuf) -> Result<Router, Box<dyn Error>> {
     let cache = appdir.join("fsnebula");
@@ -35,9 +33,9 @@ pub async fn router(urls: FSNPaths, appdir: PathBuf) -> Result<Router, Box<dyn E
     let fsn_pool = db::init(cache.join("mods.db")).await?;
 
     let app = Router::new()
-        .route("/mods/list", get(mod_list_wrapper))
-        .route("/mods/update", get(mod_update_wrapper))
-        .route("/mod/:id", get(mod_info_wrapper))
+        .route("/mods/list", get(mod_list))
+        .route("/mods/update", get(mod_update))
+        .route("/mod/:id", get(mod_info))
         .layer(
             ServiceBuilder::new()
                 .layer(Extension(fsn_pool))
@@ -67,35 +65,20 @@ impl From<FSNMod> for SimpleMod {
     }
 }
 
-async fn mod_list_wrapper(
-    Extension(fsn_pool): Extension<SqlitePool>,
-) -> Result<String, (StatusCode, String)> {
-    match mod_list(fsn_pool).await {
-        Ok(str) => Ok(str),
-        Err(e) => Err(internal_error_dyn(e)),
-    }
-}
+// async fn mod_list_wrapper(Extension(fsn_pool): Extension<SqlitePool>) -> (StatusCode, String) {
+//     internal_error_dyn(mod_list(fsn_pool).await)
+// }
 
-async fn mod_list(fsn_pool: SqlitePool) -> Result<String, Box<dyn Error>> {
-    let mut tx = fsn_pool.begin().await?;
-    let mods = sqlx::query_as!(SimpleMod, "SELECT id, title, `version`, logo FROM mods")
+async fn mod_list(Extension(fsn_pool): Extension<SqlitePool>) -> Result<Json<Vec<SimpleMod>>, String> {
+    let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
+    let mods: Vec<SimpleMod> = sqlx::query_as!(SimpleMod, "select id, title, coalesce(max(`version`),'0.1.0') as version, logo from mods group by id;")
         .fetch_all(&mut tx)
-        .await?;
-    serde_json::to_string(&mods).map_err(|e| e.into())
+        .await.map_err(|x| x.to_string())?;
+    Ok(Json(mods))
 }
 
-async fn mod_info_wrapper(
-    Path(id): Path<String>,
-    Extension(fsn_pool): Extension<SqlitePool>,
-) -> Result<String, (StatusCode, String)> {
-    match mod_info(id, fsn_pool).await {
-        Ok(str) => Ok(str),
-        Err(e) => Err(internal_error_dyn(e)),
-    }
-}
-
-async fn mod_info(id: String, fsn_pool: SqlitePool) -> Result<String, Box<dyn Error>> {
-    let mut tx = fsn_pool.begin().await?;
+async fn mod_info(Path(id): Path<String>, Extension(fsn_pool): Extension<SqlitePool>) -> Result<Json<Vec<SimpleMod>>, String> {
+    let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
     let mods = sqlx::query_as!(
         SimpleMod,
         "SELECT id, title, `version`, logo FROM mods \
@@ -103,8 +86,8 @@ async fn mod_info(id: String, fsn_pool: SqlitePool) -> Result<String, Box<dyn Er
         id
     )
     .fetch_all(&mut tx)
-    .await?;
-    serde_json::to_string(&mods).map_err(|e| e.into())
+    .await.map_err(|x| x.to_string())?;
+    Ok(Json(mods))
 }
 
 #[derive(PartialEq)]
@@ -152,157 +135,41 @@ impl From<JoinError> for UpdateError {
     }
 }
 
-async fn mod_update_wrapper(
+async fn mod_update(
     Extension(fsn_pool): Extension<SqlitePool>,
     Extension(urls): Extension<FSNPaths>,
     Extension(cache): Extension<PathBuf>,
-) -> Result<String, (StatusCode, String)> {
-    match mod_update(fsn_pool, urls, cache).await {
-        Ok(str) => Ok(str),
-        Err(e) => Err(internal_error_dyn(e)),
-    }
-}
-
-async fn mod_update(
-    fsn_pool: SqlitePool,
-    urls: FSNPaths,
-    cache: PathBuf,
-) -> Result<String, Box<dyn Error>> {
-    let repo = get_fsnmods(cache, urls).await?;
+) -> Result<String, String> {
+    let repo = get_fsnmods(cache, urls).await.map_err(|x| x.to_string())?;
     // Early exit, we don't have to do anything.
     if let UpdateStatus::Unchanged() = repo {
         return Ok("unchanged".to_string());
     }
     if let UpdateStatus::Changed(rep) = repo {
-        for fsnmod in rep.mods {
-            let mut tx = fsn_pool.begin().await?;
-            let exists = sqlx::query!(
-                "SELECT mods.id, mods.version FROM mods WHERE (mods.id, mods.version) = (?1, ?2);",
-                fsnmod.id,
-                fsnmod.version,
-            )
+        // Select most recent mod already in DB:
+        let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
+        let newest_mod  = sqlx::query!(
+            "SELECT coalesce(max(last_update),'0000-00-00') as val from mods;")
             .fetch_optional(&mut tx)
-            .await?;
+            .await
+            .map_err(|x| x.to_string())?
+            .map_or(
+                "0000-00-00".to_string(), // Handle no row returned
+                //sqlx thinks the row can be null, so handle that option too
+                |x| x.val.unwrap_or("0000-00-00".to_string())
+            ); 
+            tx.commit().await.map_err(|x| x.to_string())?;
 
-            // Skip if we already have that mod/version combo in the database.
-            if exists.is_some() {
-                continue;
-            }
-
-            db::update_mods(&fsnmod, &mut tx).await?;
-            if let Some(stab) = &fsnmod.stability {
-                sqlx::query!(
-                    "INSERT OR IGNORE INTO mods_stab (`stab`, `id`, `version`)
-                    VALUES (?1, ?2, ?3)",
-                    stab,
-                    fsnmod.id,
-                    fsnmod.version
-                )
-                .execute(&mut tx)
-                .await?;
-            }
-            for screen in fsnmod.screenshots.iter() {
-                db::update_link(&fsnmod, "screenshot", screen, &mut tx).await?;
-            }
-
-            for attach in fsnmod.attachments.iter() {
-                db::update_link(&fsnmod, "attachment", attach, &mut tx).await?;
-            }
-
-            if let Some(thread) = &fsnmod.release_thread {
-                db::update_link(&fsnmod, "thread", thread, &mut tx).await?;
-            }
-
-            for vid in fsnmod.videos.iter() {
-                db::update_link(&fsnmod, "videos", vid, &mut tx).await?;
-            }
-
-            for dep in fsnmod.mod_flag.iter() {
-                db::update_mod_flags(&fsnmod, dep, &mut tx).await?;
-            }
-
-            for package in fsnmod.packages {
-                let p_id = sqlx::query_file!(
-                    "src/fsnebula/queries/update/packages.sql",
-                    fsnmod.id,
-                    fsnmod.version,
-                    package.name,
-                    package.notes,
-                    package.status,
-                    package.environment,
-                    package.folder,
-                    package.is_vp
-                )
-                .fetch_one(&mut tx)
-                .await?
-                .p_id;
-
-                for zipfile in package.files {
-                    sqlx::query_file!(
-                        "src/fsnebula/queries/update/zipfiles.sql",
-                        p_id,
-                        zipfile.filename,
-                        zipfile.dest,
-                        zipfile.filesize,
-                    )
-                    .execute(&mut tx)
-                    .await?;
-                }
-                for dep in package.dependencies {
-                    let dep_id = sqlx::query!(
-                        "INSERT INTO pak_dep (p_id, version, dep_mod_id)
-                        VALUES (?1, ?2, ?3)
-                        RETURNING id
-                        ",
-                        p_id,
-                        dep.version,
-                        dep.id
-                    )
-                    .fetch_one(&mut tx)
-                    .await?
-                    .id;
-
-                    for dep_pak in dep.packages {
-                        sqlx::query!(
-                            "INSERT into dep_pak (dep_id, name) \
-                            VALUES (?1, ?2);",
-                            dep_id,
-                            dep_pak
-                        )
-                        .execute(&mut tx)
-                        .await?;
-                    }
-                }
-
-                for modfile in package.filelist {
-                    let FSNChecksum::SHA256(hash) = modfile.checksum.clone();
-
-                    let zip_id: i64 = sqlx::query!(
-                        "SELECT id FROM zipfiles WHERE (p_id, filename) == (?1, ?2)",
-                        p_id,
-                        modfile.archive
-                    )
-                    .fetch_one(&mut tx)
-                    .await?
-                    .id;
-
-                    sqlx::query!(
-                        "INSERT OR IGNORE INTO files (f_path, zip_id, h_val) \
-                        VALUES (?1, ?2, ?3)",
-                        modfile.filename,
-                        zip_id,
-                        hash,
-                    )
-                    .execute(&mut tx)
-                    .await?;
-                }
-            }
-
-            tx.commit().await?;
+        let new_mods = rep.mods.into_iter().filter(|m| m.last_update >= newest_mod);
+        
+        for fsnmod in new_mods {
+            db::commit_mod(&fsn_pool, fsnmod).await.map_err(|x| x.to_string())?;
         }
     }
     Ok("updated".to_string())
 }
+
+
 
 async fn get_fsnmods(cache: PathBuf, urls: FSNPaths) -> Result<UpdateStatus, Box<dyn Error>> {
     tokio::fs::create_dir_all(&cache).await?;
