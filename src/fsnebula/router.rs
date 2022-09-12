@@ -14,6 +14,7 @@ use axum::{
 };
 
 use reqwest::header::{ETAG, IF_NONE_MATCH};
+use serde::Serialize;
 use serde_json;
 use sqlx::{
     SqlitePool,
@@ -90,7 +91,7 @@ async fn mod_info(Path(id): Path<String>, Extension(fsn_pool): Extension<SqliteP
     Ok(Json(mods))
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum UpdateStatus {
     Changed(Repo),
     Unchanged(),
@@ -135,15 +136,24 @@ impl From<JoinError> for UpdateError {
     }
 }
 
+#[derive(Debug, Serialize, Default)]
+struct UpdateInfo {
+    status: String,
+    get_time: u128,
+    commit_time: u128
+}
+
 async fn mod_update(
     Extension(fsn_pool): Extension<SqlitePool>,
     Extension(urls): Extension<FSNPaths>,
     Extension(cache): Extension<PathBuf>,
-) -> Result<String, String> {
+) -> Result<Json<UpdateInfo>, String> {
+    let start_time = std::time::Instant::now();
     let repo = get_fsnmods(cache, urls).await.map_err(|x| x.to_string())?;
+    let get_time = start_time.elapsed().as_millis();
     // Early exit, we don't have to do anything.
     if let UpdateStatus::Unchanged() = repo {
-        return Ok("unchanged".to_string());
+        return Ok(Json(UpdateInfo { status: "unchanged".to_string(), get_time, commit_time: 0 }));
     }
     if let UpdateStatus::Changed(rep) = repo {
         // Select most recent mod already in DB:
@@ -166,7 +176,8 @@ async fn mod_update(
             db::commit_mod(&fsn_pool, fsnmod).await.map_err(|x| x.to_string())?;
         }
     }
-    Ok("updated".to_string())
+    let commit_time = start_time.elapsed().as_millis() - get_time;
+    Ok(Json(UpdateInfo { status: "updated".to_string(), get_time, commit_time}))
 }
 
 
