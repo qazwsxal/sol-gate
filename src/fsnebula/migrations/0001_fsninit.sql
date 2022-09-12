@@ -39,14 +39,16 @@ CREATE TABLE IF NOT EXISTS mods (
     -- release_thread
     -- videos
     `notes` TEXT,
-    `first_release` TEXT,
-    `last_update` TEXT,
-    `cmdline` TEXT,
+    `first_release` TEXT NOT NULL,
+    `last_update` TEXT NOT NULL,
+    `cmdline` TEXT NOT NULL,
     -- mod_flag
     `mod_type` TEXT NOT NULL REFERENCES mod_type(`type`),
     -- packages
     PRIMARY KEY(`id`, `version`)
 );
+
+CREATE INDEX IF NOT EXISTS mod_update_date on mods(`last_update`);
 
 CREATE TRIGGER IF NOT EXISTS mod_id_insert
 BEFORE INSERT ON mods

@@ -1,9 +1,9 @@
-use platform_dirs::{AppDirs, UserDirs};
+use platform_dirs::{AppDirs};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
-use std::fs::{self, File};
-use std::io::{self, BufReader, Error, ErrorKind};
-use std::path::{self, Path, PathBuf};
+use std::fs::{self};
+use std::io::{self, Error};
+use std::path::{PathBuf};
 use toml;
 
 use crate::fsnebula::FSNPaths;

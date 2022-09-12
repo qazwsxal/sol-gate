@@ -1,5 +1,5 @@
 use sqlx;
-use sqlx::migrate::Migrator;
+
 use sqlx::Database;
 use sqlx::Decode;
 use sqlx::Type;
