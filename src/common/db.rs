@@ -61,7 +61,7 @@ where
             "stable" => Ok(Self::Stable),
             "rc" => Ok(Self::RC),
             "nightly" => Ok(Self::Nightly),
-            x => bail!(x),
+            x => panic!("{:?}", x),
         }
     }
 }
@@ -118,7 +118,7 @@ where
             "mod" => Ok(Self::Mod),
             "tc" => Ok(Self::TC),
             "engine" => Ok(Self::Engine),
-            x => bail!(x),
+            x => panic!("{:?}", x),
         }
     }
 }

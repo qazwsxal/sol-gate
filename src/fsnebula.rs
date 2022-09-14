@@ -1,6 +1,8 @@
-use hyper::header::{ETAG, IF_NONE_MATCH};
-use hyper::StatusCode;
-use reqwest;
+use reqwest::{
+    self,
+    header::{ETAG, IF_NONE_MATCH},
+    StatusCode,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;

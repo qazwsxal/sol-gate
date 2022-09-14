@@ -1,9 +1,7 @@
 use hex;
 use serde::{Deserialize, Serialize};
 
-use std::{
-    fmt::{Debug, Display},
-};
+use std::fmt::{Debug, Display};
 pub mod db;
 pub mod router;
 #[derive(Deserialize, Serialize, Debug, Clone)]

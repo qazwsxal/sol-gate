@@ -1,27 +1,15 @@
-#[macro_use]
-extern crate simple_error;
-use axum::{
-    self,
-    body::{boxed, Empty, Full},
-    http::{header, HeaderValue, StatusCode, Uri},
-    response::{IntoResponse, Response},
-    routing::get,
-};
-
+use axum::{self, Router};
 use clap::Parser;
-
-use include_dir::{include_dir, Dir};
-
 use open;
-use std::io::{ErrorKind};
 use std::path::PathBuf;
 use std::process::exit;
+use std::{io::ErrorKind, sync::Arc};
 
+mod api;
 mod cli;
 mod common;
 mod config;
 mod fsnebula;
-static FRONTEND_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/frontend/build");
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,17 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1)
             }
             config::ReadError::IOError(e) => match e.kind() {
-                ErrorKind::NotFound => config::setup(),
+                ErrorKind::NotFound => config::Config::default(),
                 _ => panic!("{error:#?}", error = e),
             },
         },
     };
-    let fsn_router = fsnebula::router::router(config.fsnebula, config::default_dir()).await?;
-    let api_router = axum::Router::new().nest("/fsn", fsn_router);
-    //TODO: Actually add API endpoints
-    let app = axum::Router::new()
-        .fallback(get(frontend))
-        .nest("/api", api_router);
+    let app: Router = api::make_api(config, config::default_dir()).await;
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 4000)); // User configurable?
 
@@ -60,28 +43,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     open::that("http://127.0.0.1:4000/")?;
     let (_result,) = tokio::join!(server);
     Ok(())
-}
-
-async fn frontend(uri: Uri) -> impl IntoResponse {
-    // Ugly "no path means index.html" hack
-    let path = match uri.path().trim_start_matches("/") {
-        "" => "index.html",
-        x => x,
-    };
-    let mime_type = mime_guess::from_path(path).first_or_text_plain();
-    let file = FRONTEND_DIR.get_file(path);
-    match file {
-        None => Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(boxed(Empty::new()))
-            .unwrap(),
-        Some(file) => Response::builder()
-            .status(StatusCode::OK)
-            .header(
-                header::CONTENT_TYPE,
-                HeaderValue::from_str(mime_type.as_ref()).unwrap(),
-            )
-            .body(boxed(Full::from(file.contents())))
-            .unwrap(),
-    }
 }

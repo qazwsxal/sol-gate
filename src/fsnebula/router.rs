@@ -1,24 +1,19 @@
-use std::{error::Error};
+use std::error::Error;
 use std::fmt;
 use std::path::PathBuf;
-
 
 use axum::{
     self,
     extract::{Extension, Path},
     http::StatusCode,
     routing::get,
-    Router,
-    Json,
-
+    Json, Router,
 };
 
 use reqwest::header::{ETAG, IF_NONE_MATCH};
 use serde::Serialize;
 use serde_json;
-use sqlx::{
-    SqlitePool,
-};
+use sqlx::SqlitePool;
 use tokio::task::JoinError;
 use tower::ServiceBuilder;
 
@@ -31,7 +26,7 @@ use super::{
 pub async fn router(urls: FSNPaths, appdir: PathBuf) -> Result<Router, Box<dyn Error>> {
     let cache = appdir.join("fsnebula");
     tokio::fs::create_dir_all(&cache).await?;
-    let fsn_pool = db::init(cache.join("mods.db")).await?;
+    let fsn_pool = db::init(appdir.join("mods.db")).await?;
 
     let app = Router::new()
         .route("/mods/list", get(mod_list))
@@ -52,7 +47,7 @@ struct SimpleMod {
     id: String,
     title: String,
     version: String,
-    logo: Option<String>,
+    tile: Option<String>,
 }
 
 impl From<FSNMod> for SimpleMod {
@@ -61,7 +56,7 @@ impl From<FSNMod> for SimpleMod {
             id: m.id,
             title: m.title,
             version: m.version,
-            logo: m.logo,
+            tile: m.tile,
         }
     }
 }
@@ -70,24 +65,30 @@ impl From<FSNMod> for SimpleMod {
 //     internal_error_dyn(mod_list(fsn_pool).await)
 // }
 
-async fn mod_list(Extension(fsn_pool): Extension<SqlitePool>) -> Result<Json<Vec<SimpleMod>>, String> {
+async fn mod_list(
+    Extension(fsn_pool): Extension<SqlitePool>,
+) -> Result<Json<Vec<SimpleMod>>, String> {
     let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
-    let mods: Vec<SimpleMod> = sqlx::query_as!(SimpleMod, "select id, title, coalesce(max(`version`),'0.1.0') as version, logo from mods group by id;")
+    let mods: Vec<SimpleMod> = sqlx::query_as!(SimpleMod, "select id, title, coalesce(max(`version`),'0.1.0') as version, tile from mods group by id;")
         .fetch_all(&mut tx)
         .await.map_err(|x| x.to_string())?;
     Ok(Json(mods))
 }
 
-async fn mod_info(Path(id): Path<String>, Extension(fsn_pool): Extension<SqlitePool>) -> Result<Json<Vec<SimpleMod>>, String> {
+async fn mod_info(
+    Path(id): Path<String>,
+    Extension(fsn_pool): Extension<SqlitePool>,
+) -> Result<Json<Vec<SimpleMod>>, String> {
     let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
     let mods = sqlx::query_as!(
         SimpleMod,
-        "SELECT id, title, `version`, logo FROM mods \
+        "SELECT id, title, `version`, tile FROM mods \
         where mods.id = ?1",
         id
     )
     .fetch_all(&mut tx)
-    .await.map_err(|x| x.to_string())?;
+    .await
+    .map_err(|x| x.to_string())?;
     Ok(Json(mods))
 }
 
@@ -140,7 +141,7 @@ impl From<JoinError> for UpdateError {
 struct UpdateInfo {
     status: String,
     get_time: u128,
-    commit_time: u128
+    commit_time: u128,
 }
 
 async fn mod_update(
@@ -153,34 +154,42 @@ async fn mod_update(
     let get_time = start_time.elapsed().as_millis();
     // Early exit, we don't have to do anything.
     if let UpdateStatus::Unchanged() = repo {
-        return Ok(Json(UpdateInfo { status: "unchanged".to_string(), get_time, commit_time: 0 }));
+        return Ok(Json(UpdateInfo {
+            status: "unchanged".to_string(),
+            get_time,
+            commit_time: 0,
+        }));
     }
     if let UpdateStatus::Changed(rep) = repo {
         // Select most recent mod already in DB:
         let mut tx = fsn_pool.begin().await.map_err(|x| x.to_string())?;
-        let newest_mod  = sqlx::query!(
-            "SELECT coalesce(max(last_update),'0000-00-00') as val from mods;")
-            .fetch_optional(&mut tx)
-            .await
-            .map_err(|x| x.to_string())?
-            .map_or(
-                "0000-00-00".to_string(), // Handle no row returned
-                //sqlx thinks the row can be null, so handle that option too
-                |x| x.val.unwrap_or("0000-00-00".to_string())
-            ); 
-            tx.commit().await.map_err(|x| x.to_string())?;
+        let newest_mod =
+            sqlx::query!("SELECT coalesce(max(last_update),'0000-00-00') as val from mods;")
+                .fetch_optional(&mut tx)
+                .await
+                .map_err(|x| x.to_string())?
+                .map_or(
+                    "0000-00-00".to_string(), // Handle no row returned
+                    //sqlx thinks the row can be null, so handle that option too
+                    |x| x.val.unwrap_or("0000-00-00".to_string()),
+                );
+        tx.commit().await.map_err(|x| x.to_string())?;
 
         let new_mods = rep.mods.into_iter().filter(|m| m.last_update >= newest_mod);
-        
+
         for fsnmod in new_mods {
-            db::commit_mod(&fsn_pool, fsnmod).await.map_err(|x| x.to_string())?;
+            db::commit_mod(&fsn_pool, fsnmod)
+                .await
+                .map_err(|x| x.to_string())?;
         }
     }
     let commit_time = start_time.elapsed().as_millis() - get_time;
-    Ok(Json(UpdateInfo { status: "updated".to_string(), get_time, commit_time}))
+    Ok(Json(UpdateInfo {
+        status: "updated".to_string(),
+        get_time,
+        commit_time,
+    }))
 }
-
-
 
 async fn get_fsnmods(cache: PathBuf, urls: FSNPaths) -> Result<UpdateStatus, Box<dyn Error>> {
     tokio::fs::create_dir_all(&cache).await?;
