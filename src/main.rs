@@ -25,6 +25,8 @@ static FRONTEND_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/frontend/build"
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    console_subscriber::init();
+
     let args = cli::Cli::parse();
     let config_path: Option<PathBuf> = args.config.map(|v| PathBuf::from(v));
     let config_result = config::Config::read(config_path);
