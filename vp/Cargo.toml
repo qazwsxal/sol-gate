@@ -5,5 +5,26 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+bin = ["dep:tokio", "dep:clap", "dep:async-channel", "dep:num_cpus"]
+
+
 [dependencies]
 nom = "7.1"
+lz4 = "1.24.0"
+async-channel = {version = "~1.7.1", optional = true} 
+tokio = {version = "~1.21", optional = true, features=["full", "tracing"]}
+clap  = {version = "~3.2", optional = true, features = ["derive"]}
+num_cpus = {version="~1.13.1", optional = true}
+tracing = "0.1"
+tracing-subscriber = "0.3"
+console-subscriber = "~0.1"
+
+[lib]
+name = "vp"
+path = "src/lib.rs"
+
+[[bin]]
+required-features = ["bin"]
+name = "vp-tools"
+path = "src/bin.rs"

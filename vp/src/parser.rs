@@ -1,10 +1,11 @@
-use crate::types::{VPDir, VPHeader, VPIndex};
+use crate::types::{VPHeader, VPIndex};
+use nom;
 use nom::bytes::complete::*;
 use nom::multi::many0;
 use nom::number::complete::le_u32;
 use nom::IResult;
 
-pub(crate) fn header(input: &[u8]) -> IResult<&[u8], VPHeader> {
+pub fn header(input: &[u8]) -> IResult<&[u8], VPHeader> {
     let (i, _) = tag("VPVP".as_bytes())(input)?;
     let (i, version) = le_u32(i)?;
     let (i, offset) = le_u32(i)?;
