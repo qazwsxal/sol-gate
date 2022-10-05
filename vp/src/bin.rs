@@ -53,7 +53,9 @@ struct FileContents {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(debug_assertions)]
     console_subscriber::init();
+
     let cli = Cli::parse();
     match cli.mode {
         Mode::Decompress(opts) => decompress(opts).await?,
