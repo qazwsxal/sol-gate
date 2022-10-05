@@ -1,16 +1,16 @@
-use std::{io::SeekFrom, path::{PathBuf, Path}};
+use std::{
+    io::SeekFrom,
+    path::{Path, PathBuf},
+};
 
-use async_channel;
+
 use clap::{Parser, Subcommand};
-use num_cpus;
 use tokio::{
     self,
     fs::File,
-    io::{AsyncReadExt, AsyncSeekExt},
-    sync::Mutex,
+    io::{AsyncReadExt, AsyncSeekExt, BufReader},
     task::{JoinHandle, JoinSet},
 };
-use console_subscriber;
 
 use vp::{compression::maybe_decompress, fs};
 
@@ -66,50 +66,66 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
     let index = fs::index(&mut std::fs::File::open(&opts.input_vp)?)?;
-    let files = index.flatten();
-    let (mut tx_vp, mut rx_vp) = async_channel::bounded::<FileContents>(4);
+    let mut files = index.flatten();
+    files.sort_by_key(|f| f.fileoffset); // Order by file offset so we're not seeking back and forth.
+    let (tx_vp, rx_vp) = async_channel::bounded::<FileContents>(4);
     let vp_task: JoinHandle<tokio::io::Result<()>> = tokio::spawn(async move {
-        let mut vp = File::open(opts.input_vp).await?;
+        let mut vp = BufReader::new(File::open(opts.input_vp).await?);
+        let mut currpos = 0;
         for vpfile in files {
+            // files in a VP are *usually* contigious, but there's no actual garuantee.
+            // We keep track of the current offset to prevent an unnecessary seek operation
+            // if everything lines up.
+            if currpos != vpfile.fileoffset {
+                // We'll hit this on first iteration as the header is 16 bytes long.
+                vp.seek(SeekFrom::Start(vpfile.fileoffset)).await?;
+                currpos = vpfile.fileoffset;
+            }
             let mut buf = vec![0u8; vpfile.size.try_into().unwrap()];
-            vp.seek(SeekFrom::Start(vpfile.fileoffset)).await?;
-            vp.read(&mut buf).await?;
-            tx_vp.send(FileContents {
-                path: vpfile.name.into(),
-                contents: buf,
-            }).await;
+            vp.read_exact(&mut buf).await?;
+            currpos += vpfile.size as u64;
+            tx_vp
+                .send(FileContents {
+                    path: vpfile.name.into(),
+                    contents: buf,
+                })
+                .await;
         }
         Ok(())
     });
-    let mut decompress_tasks= JoinSet::new();
+    let mut decompress_tasks = JoinSet::new();
     let mut save_tasks = JoinSet::new();
 
-    let (tx_uc, rx_uc) = async_channel::bounded::<FileContents>(4);    
+    let (tx_uc, rx_uc) = async_channel::bounded::<FileContents>(4);
     for _ in 0..num_cpus::get() {
-            let rx = rx_vp.clone();
-            let tx = tx_uc.clone();
-            decompress_tasks.spawn(async move {
-                while let Ok(entry) = rx.recv().await {
-                    let path = entry.path;
-                    let contents = maybe_decompress(entry.contents);
-                    tx.send(FileContents { path, contents }).await;
-                }
-            });
-        }
-        drop(tx_uc);
+        let rx = rx_vp.clone();
+        let tx = tx_uc.clone();
+        decompress_tasks.spawn(async move {
+            while let Ok(entry) = rx.recv().await {
+                let path = entry.path;
+                let contents = maybe_decompress(entry.contents);
+                tx.send(FileContents { path, contents }).await;
+            }
+        });
+    }
+    drop(tx_uc);
 
-        while let Ok(entry) = rx_uc.recv().await {
-                    save_tasks.spawn(async move {
-                    let dir: PathBuf = entry.path.parent().unwrap_or(&Path::new(".")).to_path_buf();
-                    dbg!(&entry.path);
-                    tokio::fs::DirBuilder::new().recursive(true).create(dir).await.unwrap();
-                    tokio::fs::write(entry.path, entry.contents).await.unwrap();
-                }
-            );
-        }
-    
+    while let Ok(entry) = rx_uc.recv().await {
+        save_tasks.spawn(async move {
+            let dir: PathBuf = entry.path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+            //dbg!(&entry.path);
+            tokio::fs::DirBuilder::new()
+                .recursive(true)
+                .create(dir)
+                .await
+                .unwrap();
+            tokio::fs::write(entry.path, entry.contents).await
+        });
+    }
+
     while let Some(task) = save_tasks.join_next().await {
-    }    
+        task??;
+    }
     Ok(())
 }
 
