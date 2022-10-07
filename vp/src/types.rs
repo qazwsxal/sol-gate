@@ -87,10 +87,12 @@ impl From<VPIndex> for VPFile {
         Self {
             fileoffset: vpi.fileoffset.into(),
             size: vpi.size.into(),
-            name: std::str::from_utf8(&vpi.name)
-                .unwrap()
-                .trim_matches(char::from(0))
-                .to_string(),
+            name: vpi
+                .name
+                .iter()
+                .take_while(|&&c| c != 0)
+                .map(|&u| u as char)
+                .collect(),
             timestamp: vpi.timestamp,
         }
     }
@@ -100,13 +102,16 @@ impl From<&mut Iter<'_, VPIndex>> for VPDir {
     fn from(vvpi: &mut Iter<VPIndex>) -> Self {
         let mut vpdir = VPDir::default();
         while let Some(vpi) = vvpi.next() {
-            let vpi_name = std::str::from_utf8(&vpi.name)
-                .unwrap()
-                .trim_matches(char::from(0));
+            let vpi_name: String = vpi
+                .name
+                .iter()
+                .take_while(|&&c| c != 0)
+                .map(|&u| u as char)
+                .collect();
             match vpi.size {
                 // if size is 0, we're defining a directory
                 0 => {
-                    match vpi_name {
+                    match vpi_name.as_str() {
                         ".." => break, // End of folder, so return vpdir with full contents vector
                         &_ => vpdir.contents.push(VPEntry::Dir({
                             let mut v = VPDir::from(&mut *vvpi);
