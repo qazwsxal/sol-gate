@@ -1,8 +1,9 @@
 use std::{
+    error::Error,
+    fmt::Display,
     io::SeekFrom,
     path::{Path, PathBuf},
 };
-
 
 use clap::{Parser, Subcommand};
 use tokio::{
@@ -12,6 +13,7 @@ use tokio::{
     task::{JoinHandle, JoinSet},
 };
 
+use async_channel;
 use vp::{compression::maybe_decompress, fs};
 
 #[derive(Parser, Debug)]
@@ -63,36 +65,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+#[derive(Debug)]
+pub enum VPReaderError<T: std::fmt::Debug> {
+    IOError(tokio::io::Error),
+    ChannelError(async_channel::SendError<T>),
+}
+
+impl<T: std::fmt::Debug> Display for VPReaderError<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl<T: std::fmt::Debug> Error for VPReaderError<T> {}
+
+impl<T: std::fmt::Debug> From<tokio::io::Error> for VPReaderError<T> {
+    fn from(e: tokio::io::Error) -> Self {
+        VPReaderError::<T>::IOError(e)
+    }
+}
+
+impl<T: std::fmt::Debug> From<async_channel::SendError<T>> for VPReaderError<T> {
+    fn from(e: async_channel::SendError<T>) -> Self {
+        VPReaderError::<T>::ChannelError(e)
+    }
+}
 
 async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
     let index = fs::index(&mut std::fs::File::open(&opts.input_vp)?)?;
     let mut files = index.flatten();
     files.sort_by_key(|f| f.fileoffset); // Order by file offset so we're not seeking back and forth.
     let (tx_vp, rx_vp) = async_channel::bounded::<FileContents>(4);
-    let vp_task: JoinHandle<tokio::io::Result<()>> = tokio::spawn(async move {
-        let mut vp = BufReader::new(File::open(opts.input_vp).await?);
-        let mut currpos = 0;
-        for vpfile in files {
-            // files in a VP are *usually* contigious, but there's no actual garuantee.
-            // We keep track of the current offset to prevent an unnecessary seek operation
-            // if everything lines up.
-            if currpos != vpfile.fileoffset {
-                // We'll hit this on first iteration as the header is 16 bytes long.
-                vp.seek(SeekFrom::Start(vpfile.fileoffset)).await?;
-                currpos = vpfile.fileoffset;
+    let vp_task: JoinHandle<Result<(), VPReaderError<FileContents>>> =
+        tokio::task::spawn(async move {
+            let mut vp = BufReader::new(File::open(opts.input_vp).await?);
+            let mut currpos = 0;
+            for vpfile in files {
+                // files in a VP are *usually* contigious, but there's no actual garuantee.
+                // We keep track of the current offset to prevent an unnecessary seek operation
+                // if everything lines up.
+                if currpos != vpfile.fileoffset {
+                    // We'll hit this on first iteration as the header is 16 bytes long.
+                    vp.seek(SeekFrom::Start(vpfile.fileoffset)).await?;
+                    currpos = vpfile.fileoffset;
+                }
+                let mut buf = vec![0u8; vpfile.size.try_into().unwrap()];
+                vp.read_exact(&mut buf).await?;
+                currpos += vpfile.size as u64;
+                tx_vp
+                    .send(FileContents {
+                        path: vpfile.name.into(),
+                        contents: buf,
+                    })
+                    .await?;
             }
-            let mut buf = vec![0u8; vpfile.size.try_into().unwrap()];
-            vp.read_exact(&mut buf).await?;
-            currpos += vpfile.size as u64;
-            tx_vp
-                .send(FileContents {
-                    path: vpfile.name.into(),
-                    contents: buf,
-                })
-                .await;
-        }
-        Ok(())
-    });
+            Ok(())
+        });
     let mut decompress_tasks = JoinSet::new();
     let mut save_tasks = JoinSet::new();
 
@@ -112,7 +140,11 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
 
     while let Ok(entry) = rx_uc.recv().await {
         save_tasks.spawn(async move {
-            let dir: PathBuf = entry.path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+            let dir: PathBuf = entry
+                .path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf();
             //dbg!(&entry.path);
             tokio::fs::DirBuilder::new()
                 .recursive(true)
@@ -126,6 +158,7 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
     while let Some(task) = save_tasks.join_next().await {
         task??;
     }
+    tokio::join!(vp_task).0??;
     Ok(())
 }
 
