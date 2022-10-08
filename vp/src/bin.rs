@@ -92,7 +92,10 @@ impl<T: std::fmt::Debug> From<async_channel::SendError<T>> for VPReaderError<T> 
 }
 
 async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
-    let index = fs::index(&mut std::fs::File::open(&opts.input_vp)?)?;
+    let mut index = fs::index(&mut std::fs::File::open(&opts.input_vp)?)?;
+    // Set index of root directory to extraction directory
+    index.name = opts.output_dir.to_string_lossy().to_string();
+    // index.flatten turns it into a Vec of VP files with full paths.
     let mut files = index.flatten();
     files.sort_by_key(|f| f.fileoffset); // Order by file offset so we're not seeking back and forth.
     let (tx_vp, rx_vp) = async_channel::bounded::<FileContents>(32);
