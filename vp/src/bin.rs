@@ -10,10 +10,9 @@ use tokio::{
     self,
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt, BufReader},
-    task::{JoinHandle, JoinSet},
+    task::{JoinHandle},
 };
 
-use async_channel;
 use vp::{compression::maybe_decompress, fs};
 
 #[derive(Parser, Debug)]
@@ -114,6 +113,7 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let mut buf = vec![0u8; vpfile.size.try_into().unwrap()];
                 vp.read_exact(&mut buf).await?;
+                // increment position by how much we've read.
                 currpos += vpfile.size as u64;
                 tx_vp
                     .send(FileContents {
@@ -124,44 +124,58 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(())
         });
-    let mut decompress_tasks = JoinSet::new();
-    let mut save_tasks = JoinSet::new();
-
+        
     let (tx_uc, rx_uc) = async_channel::bounded::<FileContents>(32);
+
+    let mut decompress_tasks: Vec<_> = Vec::new();
     for _ in 0..num_cpus::get() {
         let rx = rx_vp.clone();
         let tx = tx_uc.clone();
-        decompress_tasks.spawn(async move {
+        decompress_tasks.push( tokio::spawn(
+            async move {
             while let Ok(entry) = rx.recv().await {
                 let path = entry.path;
                 let contents = maybe_decompress(entry.contents);
-                tx.send(FileContents { path, contents }).await;
-            }
-        });
+                tx.send(FileContents { path, contents }).await?
+            };
+            Result::<(),async_channel::SendError<FileContents>>::Ok(())
+        }))
     }
     drop(tx_uc);
-
-    while let Ok(entry) = rx_uc.recv().await {
-        save_tasks.spawn(async move {
-            let dir: PathBuf = entry
-                .path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .to_path_buf();
-            //dbg!(&entry.path);
-            tokio::fs::DirBuilder::new()
-                .recursive(true)
-                .create(dir)
-                .await
-                .unwrap();
-            tokio::fs::write(entry.path, entry.contents).await
-        });
+    drop(rx_vp);
+    let mut save_tasks: Vec<_> = Vec::new();
+    for _ in 0..num_cpus::get() {
+        let rx = rx_uc.clone();
+        save_tasks.push( tokio::spawn(
+            async move {
+            while let Ok(entry) = rx.recv().await {
+                let dir: PathBuf = entry
+                    .path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .to_path_buf();
+                //dbg!(&entry.path);
+                tokio::fs::DirBuilder::new()
+                    .recursive(true)
+                    .create(dir)
+                    .await
+                    .unwrap();
+                tokio::fs::write(entry.path, entry.contents).await?
+            }
+            Result::<(),std::io::Error>::Ok(())
+        }))
     }
+    drop(rx_uc);
 
-    while let Some(task) = save_tasks.join_next().await {
-        task??;
+    
+    for s_task in save_tasks {
+        s_task.await??;
     }
-    tokio::join!(vp_task).0??;
+    for dc_task in decompress_tasks {
+        dc_task.await??;
+    }
+    vp_task.await??;
+
     Ok(())
 }
 
