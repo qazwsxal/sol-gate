@@ -95,7 +95,7 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
     let index = fs::index(&mut std::fs::File::open(&opts.input_vp)?)?;
     let mut files = index.flatten();
     files.sort_by_key(|f| f.fileoffset); // Order by file offset so we're not seeking back and forth.
-    let (tx_vp, rx_vp) = async_channel::bounded::<FileContents>(4);
+    let (tx_vp, rx_vp) = async_channel::bounded::<FileContents>(32);
     let vp_task: JoinHandle<Result<(), VPReaderError<FileContents>>> =
         tokio::task::spawn(async move {
             let mut vp = BufReader::new(File::open(opts.input_vp).await?);
@@ -124,7 +124,7 @@ async fn decompress(opts: DCopts) -> Result<(), Box<dyn std::error::Error>> {
     let mut decompress_tasks = JoinSet::new();
     let mut save_tasks = JoinSet::new();
 
-    let (tx_uc, rx_uc) = async_channel::bounded::<FileContents>(4);
+    let (tx_uc, rx_uc) = async_channel::bounded::<FileContents>(32);
     for _ in 0..num_cpus::get() {
         let rx = rx_vp.clone();
         let tx = tx_uc.clone();
