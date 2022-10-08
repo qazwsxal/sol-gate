@@ -1,0 +1,85 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'vp'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=vp"
+                ],
+                "filter": {
+                    "name": "vp",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'vp-tools' decompress",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=vp-tools",
+                    "--features=bin",
+                    "--package=vp"
+                ],
+                "filter": {
+                    "name": "vp-tools",
+                    "kind": "bin"
+                }
+            },
+            "args": ["decompress", "test_files/mv_radaricons.vp"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug 'vp-tools' compress",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=vp-tools",
+                    "--features=bin",
+                    "--package=vp"
+                ],
+                "filter": {
+                    "name": "vp-tools",
+                    "kind": "bin"
+                }
+            },
+            "args": ["compress"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'vp-tools'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--features=bin",
+                    "--bin=vp-tools",
+                    "--package=vp"
+                ],
+                "filter": {
+                    "name": "vp-tools",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
