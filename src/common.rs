@@ -1,40 +1,6 @@
+pub use crate::db::*;
 use hex;
 use serde::{Deserialize, Serialize};
-
-use std::fmt::{Debug, Display};
-pub mod db;
-pub mod router;
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Mod {
-    pub id: String,
-    pub title: String,
-    pub version: String,
-    pub private: bool,
-    pub parent: Option<String>,
-    pub details: Details,
-    pub cmdline: String,
-    pub mod_flag: Vec<String>,
-    pub mod_type: ModType,
-    pub packages: Vec<Package>,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ModType {
-    Engine,
-    Mod,
-    TC,
-}
-
-impl Display for ModType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Engine => "engine",
-            Self::Mod => "mod",
-            Self::TC => "tc",
-        })
-    }
-}
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Engine {
@@ -42,12 +8,11 @@ pub struct Engine {
     pub version: String,
     pub private: bool,
     pub stability: Stability,
-    pub details: Details,
     pub builds: Vec<Build>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Details {
+pub struct ModDetails {
     pub description: String,
     pub logo: Option<String>,
     pub tile: Option<String>,
@@ -86,19 +51,6 @@ pub struct X86features {
     sse2: bool,
     avx: bool,
     avx2: bool,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Stability {
-    Stable,
-    RC,
-    Nightly,
-}
-
-pub enum Item {
-    Mod(Mod),
-    Engine(Engine),
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]

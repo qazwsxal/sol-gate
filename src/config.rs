@@ -1,14 +1,13 @@
 use platform_dirs::AppDirs;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
-use std::error::Error;
 use std::fs::{self};
-use std::io;
 use std::path::PathBuf;
 use toml;
 
 use crate::fsnebula::FSNPaths;
 
+pub mod api;
 //TOML crate can't serialize Enums, so be careful here.
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {

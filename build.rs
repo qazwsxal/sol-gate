@@ -18,6 +18,5 @@ fn main() {
     Command::new(NPM).args(["run", "build"]).status().unwrap();
 
     // Rerun on sqlx migrations changing
-    println!("cargo:rerun-if-changed=src/common/migrations");
-    println!("cargo:rerun-if-changed=src/fsnebula/migrations");
+    println!("cargo:rerun-if-changed=migrations");
 }

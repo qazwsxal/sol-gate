@@ -7,7 +7,12 @@ use std::{
     path::PathBuf,
 };
 
-pub fn index<T: Read + Seek>(handle: &mut T) -> io::Result<VPDir> {
+#[cfg(feature = "tokio")]
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncRead, AsyncSeek};
+
+
+
+pub fn index<T: Read + Seek>(handle: &mut T) -> std::io::Result<VPDir> {
     handle.seek(SeekFrom::Start(0))?;
     let mut headbuf = vec![0u8; 16];
     handle.read_exact(&mut headbuf)?;
@@ -75,4 +80,25 @@ pub fn split_path(path: &Path) -> Result<(PathBuf, Vec<String>), std::io::Error>
     }
     folders.reverse();
     Ok((vp_filepath, folders))
+}
+
+#[cfg(feature = "tokio")]
+pub async fn async_index<T: AsyncRead + AsyncSeek + std::marker::Unpin>(handle: &mut T) -> Result<VPDir, Box<dyn std::error::Error>> {
+    handle.seek(SeekFrom::Start(0)).await?;
+    let mut headbuf = vec![0u8; 16];
+    handle.read_exact(&mut headbuf).await?;
+    // Using unwrap here, we can't pass error upwards with ?
+    // as headbuf would need to be passed up
+    // and would outlive the local variable.
+    // Should handle errors better, but it's a first try for now.
+    let (_, head) = parser::header(&headbuf).unwrap();
+
+    handle.seek(SeekFrom::Start(head.offset.into())).await?;
+
+    let mut indexbuf = vec![0u8; 0];
+    handle.read_to_end(&mut indexbuf).await?;
+
+    // As before, .unwrap() because we can't pass indexbuf up.
+    let (_, vp_index) = parser::indicies(&indexbuf).unwrap();
+    Ok(VPDir::from(vp_index))
 }

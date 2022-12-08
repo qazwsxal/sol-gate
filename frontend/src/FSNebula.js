@@ -27,7 +27,7 @@ export default function FSNebula() {
   const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
-    fetch('api/fsn/mods/list', { mode: 'cors' })
+    fetch('api/fsn/list', { mode: 'cors' })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error: ${response.status}`);

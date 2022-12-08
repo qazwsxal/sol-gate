@@ -1,50 +1,58 @@
 use std::{
-    mem::replace,
     ops::{Deref, DerefMut},
     path::PathBuf,
     sync::Arc,
 };
 
 use axum::{
-    self,
-    body::{boxed, Body, Empty, Full},
+    body::{boxed, Empty, Full},
+    extract::State,
     http::{header, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::get,
-    Extension, Json, Router,
+    Json, Router,
 };
 use tokio::sync::RwLock;
-use tower::ServiceBuilder;
 
-use crate::{
-    config::{self, Config},
-    fsnebula,
-};
+use crate::{config, db, fsnebula, router, files};
 use include_dir::{include_dir, Dir};
 
 static FRONTEND_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/frontend/build");
 
-pub(crate) async fn make_api(config: Config, appdir: PathBuf) -> Router {
+struct Readers {
+    raw_local: async_channel::Sender<files::PathOneshot>,
+    
+}
+
+
+
+
+
+pub(crate) async fn make_api(config: config::Config, appdir: PathBuf) -> Router {
     // let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     // let txsend = Arc::new(async move {|| tx.send(());});
-
-    let fsn_router = fsnebula::router::router(config.fsnebula.clone(), appdir)
+    
+    let sql_pool = db::init(appdir.clone().join("mods.db"))
         .await
-        .unwrap();
-    let mut config = config.clone();
-    let api_router = axum::Router::new()
-        .nest("/fsn", fsn_router)
-        .route("/config", get(get_config).put(put_config))
-        .layer(
-            ServiceBuilder::new()
-                .layer(Extension(Arc::new(RwLock::new(config))))
-                .into_inner(),
-        );
+        .expect("Could not init sql connection");
+    let (fsn_router, fsn_state) =
+        fsnebula::api::router(config.fsnebula.clone(), appdir.clone(), sql_pool.clone())
+            .await
+            .unwrap();
+
+    let arc_config = Arc::new(RwLock::new(config.clone()));
+    let sql_router = router::router(appdir.clone()).await.unwrap();
+    let api_router = Router::new()
+        .nest("/fsn", fsn_router.with_state(fsn_state))
+        .nest("/mods", sql_router.with_state(sql_pool))
+        .route("/config", get(config::api::get_config).put(config::api::put_config));
+
     //TODO: Actually add API endpoints
-    axum::Router::new()
-        .fallback(get(frontend))
-        .nest("/api", api_router)
-    //        .route("/shutdown", get(txsend))
+    Router::new()
+        .fallback(frontend)
+        .nest("/api", api_router.with_state(arc_config))
+        .with_state(()) //Keep state clean, and fallback doesn't need it.
+                        //        .route("/shutdown", get(txsend))
 }
 
 async fn frontend(uri: Uri) -> impl IntoResponse {
@@ -53,6 +61,7 @@ async fn frontend(uri: Uri) -> impl IntoResponse {
         "" => "index.html",
         x => x,
     };
+
     let mime_type = mime_guess::from_path(path).first_or_text_plain();
     let file = FRONTEND_DIR.get_file(path);
     match file {
@@ -69,18 +78,4 @@ async fn frontend(uri: Uri) -> impl IntoResponse {
             .body(boxed(Full::from(file.contents())))
             .unwrap(),
     }
-}
-
-async fn get_config(Extension(config): Extension<Arc<RwLock<Config>>>) -> Json<Config> {
-    let x = config.read().await.deref().clone();
-    Json(x)
-}
-
-async fn put_config(
-    Json(new_config): Json<Config>,
-    Extension(config): Extension<Arc<RwLock<Config>>>,
-) -> impl IntoResponse {
-    let mut x = config.write().await;
-    replace(x.deref_mut(), new_config);
-    (*x).save().map_err(|x| x.to_string())
 }

@@ -4,11 +4,11 @@ use reqwest::{
     StatusCode,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::path::PathBuf;
+use std::{fmt, path::Path};
 
 mod db;
-pub mod router;
+pub mod api;
 pub mod structs;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -70,11 +70,12 @@ impl From<reqwest::Error> for InitError {
 }
 
 impl FSNebula {
-    pub async fn init(urls: FSNPaths, appdir: PathBuf) -> Result<Self, InitError> {
-        let cache = appdir.join("fsnebula");
+    pub async fn init(urls: FSNPaths, cache: impl AsRef<Path>) -> Result<Self, InitError> {
+        // let cache = appdir.join("fsnebula");
         tokio::fs::create_dir_all(&cache).await?;
+        let mods_path = cache.as_ref().clone().join("mods.json");
         let client = reqwest::Client::new();
-        let etag_path = cache.join("mods.json.etag");
+        let etag_path = cache.as_ref().clone().join("mods.json.etag");
         let etag: String = tokio::fs::read_to_string(&etag_path)
             .await
             .unwrap_or_else(|_| String::default());
@@ -96,23 +97,22 @@ impl FSNebula {
                             None => (),
                         }
                         let resp = response.text().await?;
-                        tokio::fs::write(&cache.join("mods.json"), &resp).await?;
+                        tokio::fs::write(&mods_path, &resp).await?;
                         mods_json = Some(resp);
                         break;
                     }
                     StatusCode::NOT_MODIFIED => break,
                     _ => continue,
                 },
-                _ => continue,
             }
         }
         if mods_json.is_none() {
-            mods_json = Some(tokio::fs::read_to_string(cache.join("mods.json")).await?);
+            mods_json = Some(tokio::fs::read_to_string(mods_path).await?);
         }
         Ok(Self {
             repo: serde_json::from_str(&mods_json.unwrap())?,
             urls,
-            cache,
+            cache: cache.as_ref().to_path_buf(),
         })
     }
 }

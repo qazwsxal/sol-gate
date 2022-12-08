@@ -35,6 +35,8 @@ pub fn maybe_decompress(buf: Vec<u8>) -> Vec<u8> {
 }
 
 fn real_decompress(buf: &[u8]) -> Vec<u8> {
+    // Untested lol
+    todo!("decompression not implemented");
     let end: usize = buf.len() - 12;
     let info = LZ4Info::parse(&buf[end..]).unwrap().1;
     let len = info.filesize.try_into().unwrap();

@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-bin = ["dep:tokio", "dep:clap", "dep:async-channel", "dep:num_cpus", "dep:console-subscriber"]
+default = ["bin", "tokio"]
+bin = ["tokio", "dep:clap", "dep:async-channel", "dep:num_cpus", "dep:console-subscriber"]
+tokio = ["dep:tokio"]
 
 
 [dependencies]
