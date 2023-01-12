@@ -17,21 +17,25 @@ sha2 = "~0.10.0"
 hex = {version = "0.4", features=["serde"]}
 sqlx = { version = "0.6", features = [ "runtime-tokio-native-tls", "offline", "migrate", "sqlite", "chrono"] } 
 include_dir = "0.7"
-reqwest= "0.11"
+reqwest= {version = "0.11", features = ["gzip", "brotli", "deflate", "stream"]}
 axum = "0.6"
 mime_guess = "2.0"
 tower = {version = "0.4"}
-tower-http = {version = "0.3", features = ["add-extension", "auth", "compression-gzip", "trace"]}
+tower-http = {version = "0.3", features = ["add-extension", "auth", "compression-gzip", "trace", "fs"]}
 open = "3.0"
 console-subscriber = "0.1"
 hash_hasher = "2.0.3"
 vp = {path = "vp"}
-sevenz-rust = {path = "sevenz-rust"}
+sevenz-rust = "0.1.5"
 axum-macros = "0.3"
 chrono={version="0.4", features=["serde"]}
 async-channel = {version = "~1.7.1"}
 num_cpus = {version="~1.13.1"}
-
+thiserror = {version="~1.0.37"}
+tokio-util = {version = "0.7.4", features= ["io"]}
+futures-util="0.3.25"
+minilp = "0.2.2"
+itertools = "0.10.5"
 
 
 

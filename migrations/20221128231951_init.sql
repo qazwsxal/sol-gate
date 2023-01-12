@@ -1,9 +1,5 @@
 PRAGMA foreign_keys = ON;
-
-CREATE TABLE IF NOT EXISTS rel_names (
-    `name` TEXT PRIMARY KEY
-);
-
+CREATE TABLE IF NOT EXISTS rel_names (`name` TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS releases (
     `rel_id` INTEGER PRIMARY KEY AUTOINCREMENT,
     `name` TEXT NOT NULL REFERENCES rel_names(`name`),
@@ -19,7 +15,6 @@ CREATE INDEX IF NOT EXISTS release_date on releases(`date`);
 -- We're going to be querying this for exiting releases too so good to have an index
 CREATE UNIQUE INDEX IF NOT EXISTS release_vers on releases(`name`, `version`);
 
-
 CREATE TABLE IF NOT EXISTS mods (
     `rel_id` INTEGER REFERENCES releases(rel_id),
     `title` TEXT NOT NULL,
@@ -33,11 +28,10 @@ CREATE TABLE IF NOT EXISTS mods (
     -- release_thread
     -- videos
     `notes` TEXT,
-    `cmdline` TEXT NOT NULL
+    `cmdline` TEXT NOT NULL 
     -- mod_flag
     -- packages
 );
-
 
 CREATE TABLE IF NOT EXISTS builds (
     `rel_id` INTEGER REFERENCES releases(rel_id),
@@ -47,20 +41,18 @@ CREATE TABLE IF NOT EXISTS builds (
     `notes` TEXT
 );
 
-
 CREATE TABLE IF NOT EXISTS modlinks (
     `rel_id` INTEGER REFERENCES releases(rel_id),
     link_type TEXT,
     link TEXT
 );
 
--- mod_flags
+
 CREATE TABLE IF NOT EXISTS mod_flags (
     `key` INTEGER PRIMARY KEY AUTOINCREMENT,
     `rel_id` INTEGER REFERENCES releases(rel_id),
     dep_name TEXT NOT NULL REFERENCES rel_names(`name`)
 );
-
 
 CREATE TABLE IF NOT EXISTS packages (
     p_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -72,8 +64,6 @@ CREATE TABLE IF NOT EXISTS packages (
     folder TEXT,
     is_vp INTEGER
 );
-
-
 
 -- Dependencies for each package (mod)
 CREATE TABLE IF NOT EXISTS package_deps (
@@ -97,10 +87,7 @@ CREATE TABLE IF NOT EXISTS hashes (
     val BLOB NOT NULL UNIQUE,
     size INTEGER
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS 
-hash_index ON hashes(val);
-
+CREATE UNIQUE INDEX IF NOT EXISTS hash_index ON hashes(val);
 
 -- -- What files make up a package, 
 CREATE TABLE IF NOT EXISTS files (
@@ -108,25 +95,28 @@ CREATE TABLE IF NOT EXISTS files (
     `h_id` INTEGER NOT NULL REFERENCES hashes(id),
     `filepath` TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS 
-filehash_index ON files(`h_id`);
-
-CREATE INDEX IF NOT EXISTS 
-filepack_index ON files(`p_id`);
+CREATE INDEX IF NOT EXISTS filehash_index ON files(`h_id`);
+CREATE INDEX IF NOT EXISTS filepack_index ON files(`p_id`);
 
 
-
--- We need to know *where* each hash can be found. local or remote.
+-- We need to know *where* a hash can be found. local or remote.
 CREATE TABLE IF NOT EXISTS sources (
     `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    `h_id` BLOB NOT NULL REFERENCES hashes(id),
-    `par_id` BLOB REFERENCES hashes(id), -- optional parent, usually archive (7z or vp)
-    `path` TEXT NOT NULL, -- path to source of file, inside parent if it exists.
+    `h_id` INTEGER NOT NULL REFERENCES hashes(id),
+    `path` TEXT NOT NULL, -- path to source of file
     `location` TEXT NOT NULL,
-    `s_type` TEXT NOT NULL -- source type, what sort of file we're opening.
+    `size` INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS 
-sourcehash_index ON sources(`h_id`);
 
-CREATE INDEX IF NOT EXISTS 
-sourceparent_index ON sources(`par_id`);
+-- We're likely to query this table often to know if we can find a hash anywhere or 
+CREATE INDEX IF NOT EXISTS source_index ON sources(`h_id`);
+
+-- Sometimes files are inside other ones, and we can extract them instead of re-downloading.
+CREATE TABLE IF NOT EXISTS parents(
+    `child` INTEGER NOT NULL REFERENCES hashes(id),
+    `parent` INTEGER NOT NULL REFERENCES hashes(id),
+    `child_path` TEXT NOT NULL, -- Where to look in archive to get our file.
+    `par_type` TEXT NOT NULL -- what sort of archive (usually 7z or vp)
+);
+CREATE INDEX IF NOT EXISTS child_index ON parents(`child`);
+CREATE INDEX IF NOT EXISTS sourceparent_index ON parents(`parent`);

@@ -10,11 +10,9 @@ use std::{
 };
 
 pub(crate) async fn commit_mods(
-    fsn_pool: &sqlx::Pool<sqlx::Sqlite>,
+    mut tx: Transaction<'_, Sqlite>,
     fsnmods: Vec<FSNMod>,
 ) -> Result<(), sqlx::Error> {
-    let mut tx = fsn_pool.begin().await?;
-
     let mut name_set = HashSet::<String>::from_iter(fsnmods.iter().map(|m| m.id.clone()));
 
     name_set.extend(fsnmods.iter().filter_map(|m| m.parent.clone()));
@@ -67,11 +65,14 @@ pub(crate) async fn commit_mods(
     let hashvec = hashes.into_iter().collect::<Vec<db::SHA256Checksum>>();
     let hmap = db::queries::add_hashes(&hashvec, &mut tx).await?;
     // Now we have ids for all the hashes we've inserted.
-    // We've now got 2 tables to fill, the files table (what a package is made up of)
-    // and the sources table (where to get each file)
+    // We've now got 3 tables to fill:
+    // the files table (what a package is made up of)
+    // the parent table (which archives a file can be found in)
+    // and the sources table (where to get the archives)
 
     let mut files: Vec<db::File> = vec![];
     let mut sources: Vec<db::Source> = vec![];
+    let mut parents: Vec<db::Parent> = vec![];
     for (p_id, package) in packages {
         // first need to specify map of archives a file can be in.
         let mut archive_map = HashMap::<String, i64>::new();
@@ -81,22 +82,20 @@ pub(crate) async fn commit_mods(
             for url in archive.urls {
                 sources.push(db::Source {
                     h_id: hmap.get(&archive.checksum).unwrap().clone(),
-                    par_id: None,
                     path: url,
                     location: db::SourceLocation::FSN,
-                    s_type: db::SourceType::Raw,
+                    size: archive.filesize,
                 });
             }
         }
         // Now we add each file to our tables, we know parents too.
         for file in package.filelist {
             let h_id = hmap.get(&file.checksum).unwrap().clone();
-            sources.push(db::Source {
-                h_id,
-                par_id: archive_map.get(&file.archive).copied(),
-                path: file.orig_name, // Path inside archive.
-                location: db::SourceLocation::FSN,
-                s_type: db::SourceType::SevenZipEntry,
+            parents.push(db::Parent {
+                child: h_id,
+                parent: archive_map.get(&file.archive).unwrap().clone(),
+                child_path: file.orig_name, // Path inside archive.
+                par_type: db::EntryType::SevenZipEntry,
             });
             files.push(db::File {
                 p_id,
@@ -106,30 +105,36 @@ pub(crate) async fn commit_mods(
         }
     }
     db::queries::add_sources(&sources, &mut tx).await?;
+    db::queries::add_parents(&parents, &mut tx).await?;
     db::queries::add_files(&files, &mut tx).await?;
 
-    sqlx::query::<sqlx::Sqlite>("ANALYZE; PRAGMA analysis_limit=400;PRAGMA optimize;").execute(&mut tx)
-    .await?;
+    sqlx::query::<sqlx::Sqlite>("ANALYZE; PRAGMA analysis_limit=400;PRAGMA optimize;")
+        .execute(&mut tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }
 
-async fn add_fsn_links(fsnmod: &FSNMod, rel_id: &i64, tx: &mut Transaction<'_, sqlx::Sqlite>) -> Result<(), sqlx::Error> {
+async fn add_fsn_links(
+    fsnmod: &FSNMod,
+    rel_id: &i64,
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
+) -> Result<(), sqlx::Error> {
     for screen in fsnmod.screenshots.iter() {
-    db::queries::add_link(*rel_id, db::LinkType::Screenshot, screen, tx).await?;
-            }
+        db::queries::add_link(*rel_id, db::LinkType::Screenshot, screen, tx).await?;
+    }
     for attach in fsnmod.attachments.iter() {
-    db::queries::add_link(*rel_id, db::LinkType::Attachment, attach, tx).await?;
-            }
+        db::queries::add_link(*rel_id, db::LinkType::Attachment, attach, tx).await?;
+    }
     if let Some(thread) = &fsnmod.release_thread {
-    db::queries::add_link(*rel_id, db::LinkType::ReleaseThread, thread, tx).await?;
-            }
+        db::queries::add_link(*rel_id, db::LinkType::ReleaseThread, thread, tx).await?;
+    }
     for vid in fsnmod.videos.iter() {
-    db::queries::add_link(*rel_id, db::LinkType::Video, vid, tx).await?;
-            }
+        db::queries::add_link(*rel_id, db::LinkType::Video, vid, tx).await?;
+    }
     Ok(for dep in fsnmod.mod_flag.iter() {
-    add_mod_flags(*rel_id, dep, tx).await?;
-            })
+        add_mod_flags(*rel_id, dep, tx).await?;
+    })
 }
 
 async fn add_fsn_releases(

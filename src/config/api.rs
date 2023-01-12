@@ -5,14 +5,22 @@ use std::{
 };
 
 use axum::{
-    extract::State,
-    response::{IntoResponse, },
+    extract::{FromRef, State},
+    response::IntoResponse,
     Json,
 };
 use tokio::sync::RwLock;
 
+use crate::SolGateState;
 
 use super::Config;
+
+// support converting an `Arc<RwLock<config::Config>>` from a `SolGateState`
+impl FromRef<SolGateState> for Arc<RwLock<Config>> {
+    fn from_ref(sg_state: &SolGateState) -> Arc<RwLock<Config>> {
+        sg_state.config.clone()
+    }
+}
 
 pub(crate) async fn get_config(State(config): State<Arc<RwLock<Config>>>) -> Json<Config> {
     let x = config.read().await.deref().clone();

@@ -1,43 +1,66 @@
 use axum::{self};
 use clap::Parser;
+use config::Config;
 use open;
+use reqwest::Client;
+use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::exit;
+use std::sync::Arc;
 use tokio::signal;
-
+use tokio::sync::RwLock;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 
 mod api;
 mod cli;
 mod common;
 mod config;
 mod db;
+mod files;
 mod fsnebula;
 mod router;
-mod files;
+
+#[derive(Debug, Clone)]
+pub struct ReaderEntry {
+    pub send: mpsc::Sender<(String, oneshot::Sender<Vec<u8>>)>,
+    pub handle: Arc<JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SolGateState {
+    pub sql_pool: sqlx::sqlite::SqlitePool,
+    pub config: Arc<RwLock<config::Config>>,
+    pub vp_readers: Arc<RwLock<HashMap<PathBuf, ReaderEntry>>>,
+    pub http_client: Client,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     console_subscriber::init();
-
     let args = cli::Cli::parse();
     let config_path: Option<PathBuf> = args.config.map(|v| PathBuf::from(v));
     let config_result = config::Config::read(config_path);
     let config: config::Config = match config_result {
         Ok(config) => config,
         Err(conf_err) => match conf_err {
-            config::ReadError::ParseError(e) => {
+            config::ConfigReadError::ParseError(e) => {
                 eprintln!("Error parsing config: \n{error}", error = e);
                 exit(1)
             }
-            config::ReadError::IOError(e) => match e.kind() {
+            config::ConfigReadError::IOError(e) => match e.kind() {
                 ErrorKind::NotFound => config::Config::default(),
                 _ => panic!("{error:#?}", error = e),
             },
         },
     };
-    let app = api::make_api(config, config::default_dir()).await;
+    let appdir = Config::default_dir();
+
+    let mut sol_state = init_state(config).await.unwrap();
+
+    let app = api::make_api(sol_state).await;
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 4000)); // User configurable?
 
@@ -50,6 +73,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     open::that("http://127.0.0.1:4000/")?;
     let (_result,) = tokio::join!(server);
     Ok(())
+}
+
+async fn init_state(config: Config) -> Result<SolGateState, Box<dyn std::error::Error>> {
+    let appdir = Config::default_dir();
+
+    let sql_pool = db::init(appdir.clone().join("mods.db"))
+        .await
+        .expect("Could not init sql connection");
+
+    let rwl_config = Arc::new(RwLock::new(config));
+
+    let vp_readers = Arc::new(RwLock::new(HashMap::<PathBuf, ReaderEntry>::new()));
+
+    let http_client = Client::new();
+    Ok(SolGateState {
+        sql_pool,
+        config: rwl_config,
+        vp_readers,
+        http_client,
+    })
 }
 
 async fn shutdown_signal() {

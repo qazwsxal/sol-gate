@@ -3,16 +3,23 @@ use std::path::PathBuf;
 
 use axum::{
     self,
-    extract::{Path, State},
+    extract::{FromRef, Path, State},
     routing::get,
     Json, Router,
 };
 
-use axum_macros::debug_handler;
-
 use sqlx::SqlitePool;
 
-pub async fn router(appdir: PathBuf) -> Result<Router<SqlitePool>, Box<dyn Error>> {
+use crate::SolGateState;
+
+// grab pool out of global state.
+impl FromRef<SolGateState> for SqlitePool {
+    fn from_ref(sg_state: &SolGateState) -> SqlitePool {
+        sg_state.sql_pool.clone()
+    }
+}
+
+pub async fn router(appdir: PathBuf) -> Result<Router<SolGateState>, Box<dyn Error>> {
     let cache = appdir.join("fsnebula");
     tokio::fs::create_dir_all(&cache).await?;
 
@@ -35,7 +42,6 @@ struct SimpleMod {
 //     internal_error_dyn(mod_list(fsn_pool).await)
 // }
 
-#[debug_handler]
 async fn mod_list(State(pool): State<SqlitePool>) -> Result<Json<Vec<SimpleMod>>, String> {
     let mut tx = pool.begin().await.map_err(|x| x.to_string())?;
     let mods: Vec<SimpleMod> = sqlx::query_as!(SimpleMod, "SELECT releases.name as id, coalesce(max(releases.`version`),'0.1.0') as version, mods.`title`, mods.tile FROM releases INNER JOIN mods on releases.rel_id=mods.rel_id GROUP BY releases.name;")
@@ -43,7 +49,6 @@ async fn mod_list(State(pool): State<SqlitePool>) -> Result<Json<Vec<SimpleMod>>
         .await.map_err(|x| x.to_string())?;
     Ok(Json(mods))
 }
-#[debug_handler]
 async fn mod_info(
     Path(id): Path<String>,
     State(pool): State<SqlitePool>,

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{error::Error, fs};
 
 use axum::{
@@ -17,8 +17,10 @@ use serde_json;
 use sqlx::SqlitePool;
 use tokio::task::JoinError;
 
-use super::{db, structs::Repo, FSNPaths, FSNebula};
+use super::{db, FSNebula};
+use crate::config::FSNPaths;
 use crate::fsnebula::structs::FSNMod;
+use crate::SolGateState;
 #[derive(Clone, FromRef)]
 pub struct FSNState {
     pool: SqlitePool,
@@ -26,24 +28,13 @@ pub struct FSNState {
     cache: PathBuf,
 }
 
-pub async fn router(
-    urls: FSNPaths,
-    appdir: PathBuf,
-    pool: SqlitePool,
-) -> Result<(Router<FSNState>, FSNState), Box<dyn Error>> {
+pub async fn router(appdir: &Path) -> Result<Router<SolGateState>, Box<dyn Error>> {
     let cache = appdir.join("fsnebula");
     tokio::fs::create_dir_all(&cache).await?;
-    let fsn_state = FSNState {
-        pool,
-        urls: urls.clone(),
-        cache: cache.clone(),
-    };
-
     let app = Router::new().route("/update", get(mod_update));
 
-    Ok((app, fsn_state))
+    Ok(app)
 }
-
 
 #[derive(Debug)]
 enum UpdateError {
@@ -92,13 +83,15 @@ struct UpdateInfo {
 }
 
 async fn mod_update(
-    State(fsn_state): State<FSNState>,
+    State(state): State<SolGateState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Result<Json<UpdateInfo>, String> {
     println!("{:?}", addr);
-    let pool = fsn_state.pool;
-    let urls = fsn_state.urls;
-    let cache = fsn_state.cache;
+    let mut tx = state.sql_pool.begin().await.map_err(|x| x.to_string())?;
+    let config_guard = state.config.read().await;
+    let config = config_guard.clone();
+    let urls = config.fsnebula;
+    let cache = urls.cache.clone();
 
     let start_time = std::time::Instant::now();
     let neb = FSNebula::init(urls, cache)
@@ -107,35 +100,22 @@ async fn mod_update(
     let get_time = start_time.elapsed().as_millis();
     let rep = neb.repo;
 
-    #[derive(Hash, PartialEq, Eq)]
-    struct Rel {
-        name: String,
-        version: String,
-    }
     // Select most recent mod already in DB:
-    let mut tx = pool.begin().await.map_err(|x| x.to_string())?;
-    let existing_releases = sqlx::query_as!(Rel, "SELECT `name`, `version` from releases;")
-        .fetch_all(&mut tx)
+    let existing_releases = crate::db::queries::get_releases(&mut tx)
         .await
         .map_err(|x| x.to_string())?;
-    tx.commit().await.map_err(|x| x.to_string())?;
-
-    let mut em_map = HashSet::<Rel>::new();
-    for rel in existing_releases {
-        em_map.insert(rel);
-    }
 
     let new_mods = rep
         .mods
         .into_iter()
         .filter(|m| {
-            !em_map.contains(&Rel {
+            !existing_releases.contains(&crate::db::Rel {
                 name: m.id.clone(),
                 version: m.version.clone(),
             })
         })
         .collect::<Vec<FSNMod>>();
-    db::commit_mods(&pool, new_mods)
+    db::commit_mods(tx, new_mods)
         .await
         .map_err(|x| x.to_string())?;
     let commit_time = start_time.elapsed().as_millis() - get_time;

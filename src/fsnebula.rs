@@ -7,30 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{fmt, path::Path};
 
-mod db;
+use crate::config::FSNPaths;
+
 pub mod api;
+mod db;
 pub mod structs;
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct FSNPaths {
-    pub web: String,
-    pub api: String,
-    pub repos: Vec<String>,
-}
-
-impl Default for FSNPaths {
-    fn default() -> Self {
-        FSNPaths {
-            web: "https://fsnebula.org/".to_string(),
-            api: "https://api.fsnebula.org/api/1/".to_string(),
-            repos: vec![
-                "https://cf.fsnebula.org/storage/repo.json".to_string(),
-                "https://fsnebula.org/storage/repo.json".to_string(),
-                "https://porphyrion.feralhosting.com/datacorder/nebula/repo.json".to_string(),
-            ],
-        }
-    }
-}
 
 #[derive(Debug, Default)]
 pub struct FSNebula {

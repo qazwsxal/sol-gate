@@ -75,24 +75,36 @@ pub enum DepType {
     Optional,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Copy, sqlx::Type)]
+#[derive(
+    Deserialize, Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Copy, Hash, sqlx::Type,
+)]
 #[serde(rename_all = "lowercase")]
 #[sqlx(rename_all = "lowercase")]
-pub enum SourceType {
+pub enum EntryType {
+    // Ordering of these enum variants is used for preferential sorting.
     Raw, // Source is a flat file, .png, .txt, .vp, .7z etc. This is *the file itself* not anything in it.
     VPEntry, // Source is an entry in a VP file. Parent must be set.
     SevenZipEntry, // Source is an entry in a 7z file, Parent must be set.
 }
 
-#[derive(Deserialize, Serialize, Debug, Copy, Clone, PartialEq, sqlx::Type)]
+#[derive(
+    Deserialize, Serialize, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, sqlx::Type,
+)]
 #[serde(rename_all = "lowercase")]
 #[sqlx(rename_all = "lowercase")]
 pub enum SourceLocation {
+    // Ordering of these enum variants is used for preferential sorting.
     Local,
-    FSN,
+    Temp, // Temporary file.
     SolGate,
+    FSN,
 }
 
+impl SourceLocation {
+    pub fn is_local(&self) -> bool {
+        *self == SourceLocation::Local || *self == SourceLocation::Temp
+    }
+}
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
 pub struct Release {
     pub rel_id: i64,
@@ -101,6 +113,13 @@ pub struct Release {
     pub rel_type: RelType,
     pub date: NaiveDate,
     pub private: bool,
+}
+
+// Mini Release type for elimiating queries for existing releaes
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, sqlx::Type, sqlx::FromRow, Hash)]
+pub struct Rel {
+    pub name: String,
+    pub version: String,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
@@ -185,6 +204,7 @@ pub struct DependencyDetail {
 pub struct Hash {
     pub id: i64,
     pub val: SHA256Checksum,
+    pub size: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
@@ -194,23 +214,42 @@ pub struct File {
     pub filepath: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
+#[derive(
+    Deserialize,
+    Serialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    sqlx::Type,
+    sqlx::FromRow,
+    Hash,
+)]
 pub struct Source {
-    pub h_id: i64,
-    pub par_id: Option<i64>,
-    pub path: String,
+    // struct member order is specified so that Ord can be derived automatically in a way we want
     pub location: SourceLocation,
-    pub s_type: SourceType,
+    pub path: String,
+    pub h_id: i64,
+    pub size: i64,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
 pub struct SourceWithID {
     pub id: i64,
-    pub h_id: i64,
-    pub par_id: Option<i64>,
-    pub path: String,
     pub location: SourceLocation,
-    pub s_type: SourceType,
+    pub path: String,
+    pub h_id: i64,
+    pub size: i64,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
+pub struct Parent {
+    pub child: i64,
+    pub parent: i64,
+    pub child_path: String,
+    pub par_type: EntryType,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, sqlx::Type, sqlx::FromRow)]
