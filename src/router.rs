@@ -20,9 +20,6 @@ impl FromRef<SolGateState> for SqlitePool {
 }
 
 pub async fn router(appdir: PathBuf) -> Result<Router<SolGateState>, Box<dyn Error>> {
-    let cache = appdir.join("fsnebula");
-    tokio::fs::create_dir_all(&cache).await?;
-
     let app = Router::new()
         .route("/list", get(mod_list))
         .route("/info/:id", get(mod_info));

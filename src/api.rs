@@ -29,14 +29,14 @@ pub(crate) async fn make_api(sol_state: SolGateState) -> Router {
 
     let fsn_router = fsnebula::api::router(&appdir).await.unwrap();
     let mods_router = router::router(appdir.clone()).await.unwrap();
-    let files_router = files::api::router(sol_state.config.read().await.clone())
-        .await
-        .unwrap();
+    // let files_router = files::api::router(sol_state.config.read().await.clone())
+    //     .await
+    //     .unwrap();
 
     let api_router = Router::new()
         .nest("/fsn", fsn_router)
         .nest("/mods", mods_router)
-        .nest("/files", files_router)
+        // .nest("/files", files_router)
         .route(
             "/config",
             get(config::api::get_config).put(config::api::put_config),

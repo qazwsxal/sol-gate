@@ -84,8 +84,7 @@ CREATE TABLE IF NOT EXISTS dep_details (
 -- These are unique sha256 identifiers of a file's contents.
 CREATE TABLE IF NOT EXISTS hashes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    val BLOB NOT NULL UNIQUE,
-    size INTEGER
+    val BLOB NOT NULL UNIQUE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS hash_index ON hashes(val);
 
@@ -105,6 +104,7 @@ CREATE TABLE IF NOT EXISTS sources (
     `h_id` INTEGER NOT NULL REFERENCES hashes(id),
     `path` TEXT NOT NULL, -- path to source of file
     `location` TEXT NOT NULL,
+    `format` TEXT NOT NULL,
     `size` INTEGER NOT NULL
 );
 
@@ -112,11 +112,11 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE INDEX IF NOT EXISTS source_index ON sources(`h_id`);
 
 -- Sometimes files are inside other ones, and we can extract them instead of re-downloading.
-CREATE TABLE IF NOT EXISTS parents(
-    `child` INTEGER NOT NULL REFERENCES hashes(id),
-    `parent` INTEGER NOT NULL REFERENCES hashes(id),
-    `child_path` TEXT NOT NULL, -- Where to look in archive to get our file.
-    `par_type` TEXT NOT NULL -- what sort of archive (usually 7z or vp)
+CREATE TABLE IF NOT EXISTS archive_entries(
+    `file_id` INTEGER NOT NULL REFERENCES hashes(id),
+    `archive_id` INTEGER NOT NULL REFERENCES hashes(id),
+    `file_path` TEXT NOT NULL, -- Where to look in archive to get our file.
+    `archive_type` TEXT NOT NULL -- what sort of archive (usually 7z or vp)
 );
-CREATE INDEX IF NOT EXISTS child_index ON parents(`child`);
-CREATE INDEX IF NOT EXISTS sourceparent_index ON parents(`parent`);
+CREATE INDEX IF NOT EXISTS file_index ON archive_entries(`file_id`);
+CREATE INDEX IF NOT EXISTS archive_index ON archive_entries(`archive_id`);

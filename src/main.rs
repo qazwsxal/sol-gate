@@ -1,6 +1,7 @@
 use axum::{self};
 use clap::Parser;
 use config::Config;
+use files::readers::ReaderPool;
 use open;
 use reqwest::Client;
 use std::collections::HashMap;
@@ -33,7 +34,7 @@ pub struct ReaderEntry {
 pub struct SolGateState {
     pub sql_pool: sqlx::sqlite::SqlitePool,
     pub config: Arc<RwLock<config::Config>>,
-    pub vp_readers: Arc<RwLock<HashMap<PathBuf, ReaderEntry>>>,
+    pub reader_pool: Arc<RwLock<ReaderPool>>,
     pub http_client: Client,
 }
 
@@ -70,7 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_graceful_shutdown(shutdown_signal())
             .await
     });
-    open::that("http://127.0.0.1:4000/")?;
+    // open::that("http://127.0.0.1:4000/")?;
+    open::that("http://127.0.0.1:4000/api/fsn/update")?; // Testing FSN update mechanism
     let (_result,) = tokio::join!(server);
     Ok(())
 }
@@ -84,13 +86,12 @@ async fn init_state(config: Config) -> Result<SolGateState, Box<dyn std::error::
 
     let rwl_config = Arc::new(RwLock::new(config));
 
-    let vp_readers = Arc::new(RwLock::new(HashMap::<PathBuf, ReaderEntry>::new()));
-
+    let reader_pool = Arc::new(RwLock::new(ReaderPool::new()));
     let http_client = Client::new();
     Ok(SolGateState {
         sql_pool,
         config: rwl_config,
-        vp_readers,
+        reader_pool,
         http_client,
     })
 }

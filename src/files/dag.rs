@@ -3,6 +3,9 @@ use std::{
     hash::Hash,
 };
 
+/// This is a very basic implemtation of a DAG
+/// Can't remove nodes, doesn't enforce DAGness
+/// Plz do not abuse.
 #[derive(Debug)]
 pub struct HashDAG<T: Hash + Eq + Clone, U: Clone> {
     //n.b. we don't actually enforce that this is a DAG, things might break if misused!
@@ -17,19 +20,23 @@ pub enum DAGError {
 }
 
 #[derive(Debug)]
-struct HashNode<T> {
+pub struct HashNode<T> {
     id: T,
     parents: HashSet<usize>,
     children: HashSet<usize>,
 }
 
 impl<T> HashNode<T> {
-    fn new(id: T) -> HashNode<T> {
+    pub fn new(id: T) -> HashNode<T> {
         HashNode {
             id,
             parents: HashSet::<usize>::new(),
             children: HashSet::<usize>::new(),
         }
+    }
+
+    pub fn data(&self) -> &T {
+        &self.id
     }
 }
 
@@ -40,6 +47,9 @@ impl<T: Hash + Eq + Clone, U: Clone> HashDAG<T, U> {
             node_map: HashMap::<T, usize>::new(),
             edge_map: HashMap::<(usize, usize), U>::new(),
         }
+    }
+    pub fn get_nodes(&self) -> &Vec<HashNode<T>> {
+        &self.nodes
     }
 
     pub fn add(&mut self, id: &T) {
@@ -111,8 +121,8 @@ impl<T: Hash + Eq + Clone, U: Clone> HashDAG<T, U> {
             .collect::<Vec<_>>();
         let par_idx = self.node_map.get(parent).unwrap();
         {
-        let par_node = self.nodes.get_mut(*par_idx).unwrap();
-        par_node.children.extend(chi_idxs.iter().cloned());
+            let par_node = self.nodes.get_mut(*par_idx).unwrap();
+            par_node.children.extend(chi_idxs.iter().cloned());
         }
         for (chi_idx, ed) in chi_idxs.iter().zip(edge_data) {
             let chi_node = self.nodes.get_mut(*chi_idx).unwrap();

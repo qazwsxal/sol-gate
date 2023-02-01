@@ -80,11 +80,21 @@ pub enum DepType {
 )]
 #[serde(rename_all = "lowercase")]
 #[sqlx(rename_all = "lowercase")]
-pub enum EntryType {
+pub enum Archive {
     // Ordering of these enum variants is used for preferential sorting.
-    Raw, // Source is a flat file, .png, .txt, .vp, .7z etc. This is *the file itself* not anything in it.
-    VPEntry, // Source is an entry in a VP file. Parent must be set.
-    SevenZipEntry, // Source is an entry in a 7z file, Parent must be set.
+    VP,       // Source is an entry in a VP file.
+    SevenZip, // Source is an entry in a 7z file.
+}
+
+#[derive(
+    Deserialize, Serialize, Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, sqlx::Type,
+)]
+#[serde(rename_all = "lowercase")]
+#[sqlx(rename_all = "lowercase")]
+pub enum SourceFormat {
+    Raw,
+    SevenZip,
+    VP,
 }
 
 #[derive(
@@ -94,8 +104,8 @@ pub enum EntryType {
 #[sqlx(rename_all = "lowercase")]
 pub enum SourceLocation {
     // Ordering of these enum variants is used for preferential sorting.
+    Temp, // Temporary file. These are more likely to be stored on an SSD, so we should prefer reading from them.
     Local,
-    Temp, // Temporary file.
     SolGate,
     FSN,
 }
@@ -204,7 +214,6 @@ pub struct DependencyDetail {
 pub struct Hash {
     pub id: i64,
     pub val: SHA256Checksum,
-    pub size: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
@@ -233,6 +242,7 @@ pub struct Source {
     pub path: String,
     pub h_id: i64,
     pub size: i64,
+    pub format: SourceFormat,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
@@ -245,11 +255,11 @@ pub struct SourceWithID {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
-pub struct Parent {
-    pub child: i64,
-    pub parent: i64,
-    pub child_path: String,
-    pub par_type: EntryType,
+pub struct ArchiveEntry {
+    pub file_id: i64,
+    pub file_path: String,
+    pub archive_id: i64,
+    pub archive_type: Archive,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash, sqlx::Type, sqlx::FromRow)]

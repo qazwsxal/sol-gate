@@ -1,7 +1,8 @@
 use super::structs::FSNRelType;
 use crate::db;
 use crate::fsnebula::structs::{FSNDependency, FSNMod, FSNPackage};
-use hash_hasher::HashedSet;
+use db::queries::get_hash_ids;
+use hash_hasher::{HashedSet, HashedMap};
 use sqlx::Sqlite;
 use sqlx::{query_builder::QueryBuilder, sqlite::SqliteQueryResult, Row, Transaction};
 use std::{
@@ -63,7 +64,8 @@ pub(crate) async fn commit_mods(
     );
 
     let hashvec = hashes.into_iter().collect::<Vec<db::SHA256Checksum>>();
-    let hmap = db::queries::add_hashes(&hashvec, &mut tx).await?;
+    db::queries::add_hashes(&hashvec, &mut tx).await?;
+    let hmap = HashedMap::from_iter(get_hash_ids(&hashvec, &mut tx).await?);
     // Now we have ids for all the hashes we've inserted.
     // We've now got 3 tables to fill:
     // the files table (what a package is made up of)
@@ -72,7 +74,7 @@ pub(crate) async fn commit_mods(
 
     let mut files: Vec<db::File> = vec![];
     let mut sources: Vec<db::Source> = vec![];
-    let mut parents: Vec<db::Parent> = vec![];
+    let mut parents: Vec<db::ArchiveEntry> = vec![];
     for (p_id, package) in packages {
         // first need to specify map of archives a file can be in.
         let mut archive_map = HashMap::<String, i64>::new();
@@ -85,17 +87,18 @@ pub(crate) async fn commit_mods(
                     path: url,
                     location: db::SourceLocation::FSN,
                     size: archive.filesize,
+                    format: db::SourceFormat::SevenZip,
                 });
             }
         }
         // Now we add each file to our tables, we know parents too.
         for file in package.filelist {
             let h_id = hmap.get(&file.checksum).unwrap().clone();
-            parents.push(db::Parent {
-                child: h_id,
-                parent: archive_map.get(&file.archive).unwrap().clone(),
-                child_path: file.orig_name, // Path inside archive.
-                par_type: db::EntryType::SevenZipEntry,
+            parents.push(db::ArchiveEntry {
+                file_id: h_id,
+                archive_id: archive_map.get(&file.archive).unwrap().clone(),
+                file_path: file.orig_name, // Path inside archive.
+                archive_type: db::Archive::SevenZip,
             });
             files.push(db::File {
                 p_id,
@@ -105,7 +108,7 @@ pub(crate) async fn commit_mods(
         }
     }
     db::queries::add_sources(&sources, &mut tx).await?;
-    db::queries::add_parents(&parents, &mut tx).await?;
+    db::queries::add_archive_entries(&parents, &mut tx).await?;
     db::queries::add_files(&files, &mut tx).await?;
 
     sqlx::query::<sqlx::Sqlite>("ANALYZE; PRAGMA analysis_limit=400;PRAGMA optimize;")
@@ -143,7 +146,7 @@ async fn add_fsn_releases(
 ) -> Result<Vec<i64>, sqlx::Error> {
     let rels_chunked = fsnmods.chunks(db::BIND_LIMIT / 5);
     let mut query_builder = QueryBuilder::new(
-        "INSERT INTO releases (`name`, `version`, `rel_type`, `date`, `private`)",
+        "INSERT OR IGNORE INTO releases (`name`, `version`, `rel_type`, `date`, `private`)",
     );
     let mut rel_ids: Vec<i64> = vec![];
     for relchunk in rels_chunked {
@@ -214,7 +217,7 @@ async fn add_fsn_mod(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<SqliteQueryResult, sqlx::Error> {
     sqlx::query!(
-        "INSERT INTO mods \
+        "INSERT OR IGNORE INTO mods \
         (`rel_id`, `title`, `parent`, `description`, `logo`, `tile`, `banner`, `notes`, `cmdline`)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ",
         rel_id,
@@ -238,7 +241,7 @@ async fn add_fsn_build(
 ) -> Result<SqliteQueryResult, sqlx::Error> {
     let stability = fsnmod.stability.expect("Builds require a set stability!");
     sqlx::query!(
-        "INSERT INTO builds \
+        "INSERT OR IGNORE INTO builds \
     (`rel_id`, `title`, `stability`, `description`, `notes`) \
     VALUES (?1, ?2, ?3, ?4, ?5)",
         rel_id,
@@ -272,7 +275,7 @@ pub(crate) async fn add_fsn_packages(
 ) -> Result<Vec<i64>, sqlx::Error> {
     let paks_chunked = packages.chunks(db::BIND_LIMIT / 7);
     let mut query_builder = QueryBuilder::new(
-        "INSERT INTO packages (`rel_id`, `name`, `notes`, `status`, `environment`, `folder`, `is_vp`)"
+        "INSERT OR IGNORE INTO packages (`rel_id`, `name`, `notes`, `status`, `environment`, `folder`, `is_vp`)"
     );
     let mut pak_ids: Vec<i64> = vec![];
     for relchunk in paks_chunked {
@@ -306,7 +309,7 @@ pub(crate) async fn add_fsn_dependencies(
 ) -> Result<Vec<i64>, sqlx::Error> {
     let deps_chunked = dependencies.chunks(db::BIND_LIMIT / 3);
     let mut query_builder =
-        QueryBuilder::new("INSERT INTO package_deps (`p_id`, `modname`, `version`)");
+        QueryBuilder::new("INSERT OR IGNORE INTO package_deps (`p_id`, `modname`, `version`)");
     let mut dep_ids: Vec<i64> = vec![];
     for relchunk in deps_chunked {
         query_builder.push_values(relchunk, |mut qb, (pak_id, p)| {
@@ -334,7 +337,7 @@ async fn add_fsn_dep_details(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let dets_chunked = details.chunks(db::BIND_LIMIT / 2);
-    let mut query_builder = QueryBuilder::new("INSERT INTO dep_details (`dep_id`, `name`)");
+    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO dep_details (`dep_id`, `name`)");
     for relchunk in dets_chunked {
         query_builder.push_values(relchunk, |mut qb, (pak_id, p)| {
             qb.push_bind(pak_id).push_bind(p.clone());

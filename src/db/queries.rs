@@ -6,14 +6,14 @@ use std::{
 use hash_hasher::HashedMap;
 use sqlx::{query_builder::QueryBuilder, sqlite::SqliteQueryResult, Transaction};
 
-use super::{EntryType, File, Hash, LinkType, Parent, Rel, SHA256Checksum, Source, BIND_LIMIT};
+use super::{Archive, ArchiveEntry, File, Hash, LinkType, Rel, SHA256Checksum, Source, BIND_LIMIT};
 
 pub(crate) async fn add_release_names(
     names: &Vec<String>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let names_chunked = names.chunks(BIND_LIMIT);
-    let mut query_builder = QueryBuilder::new("INSERT INTO rel_names (`name`)");
+    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO rel_names (`name`)");
     for relchunk in names_chunked {
         query_builder.push_values(relchunk, |mut qb, s| {
             qb.push_bind(s.clone());
@@ -46,27 +46,18 @@ pub(crate) async fn add_link(
 pub(crate) async fn add_hashes(
     hashes: &Vec<SHA256Checksum>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
-) -> Result<HashedMap<SHA256Checksum, i64>, sqlx::Error> {
-    let mut hmap = get_hash_ids(hashes, tx).await?;
-
-    let new_hashes = hashes
-        .iter()
-        .filter(|&h| !hmap.contains_key(h))
-        .map(|h| h.clone())
-        .collect::<Vec<SHA256Checksum>>();
-    let mut new_hashes_qb = QueryBuilder::new("INSERT INTO hashes (`val`) ");
-    for hash_chunk in new_hashes.chunks(BIND_LIMIT / 2) {
+) -> Result<(), sqlx::Error> {
+    let mut new_hashes_qb = QueryBuilder::new("INSERT OR IGNORE INTO hashes (`val`) ");
+    for hash_chunk in hashes.chunks(BIND_LIMIT / 2) {
         new_hashes_qb.push_values(hash_chunk, |mut qb, hash| {
             qb.push_bind(hash.clone());
         });
-        new_hashes_qb.push(" RETURNING `id`, `val`");
-        let query = new_hashes_qb.build_query_as::<Hash>();
-        let rows = query.fetch_all(&mut *tx).await?;
+        let query = new_hashes_qb.build();
+        let rows = query.execute(&mut *tx).await?;
 
-        hmap.extend(rows.into_iter().map(|res| (res.val, res.id)));
         new_hashes_qb.reset();
     }
-    Ok(hmap)
+    Ok(())
 }
 
 pub(crate) async fn add_files(
@@ -74,7 +65,7 @@ pub(crate) async fn add_files(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let files_chunked = files.chunks(BIND_LIMIT / 3);
-    let mut query_builder = QueryBuilder::new("INSERT INTO files (`p_id`, `h_id`, `filepath`)");
+    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO files (`p_id`, `h_id`, `filepath`)");
     for file_chunk in files_chunked {
         query_builder.push_values(file_chunk, |mut qb, f| {
             qb.push_bind(f.p_id.clone())
@@ -94,12 +85,14 @@ pub(crate) async fn add_sources(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let dets_chunked = sources.chunks(BIND_LIMIT / 5);
-    let mut query_builder = QueryBuilder::new("INSERT INTO sources (`h_id`, `path`, `location`,)");
+    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO sources (`h_id`, `path`, `location`, `format`, `size`)");
     for relchunk in dets_chunked {
         query_builder.push_values(relchunk, |mut qb, s| {
             qb.push_bind(s.h_id.clone())
                 .push_bind(s.path.clone())
-                .push_bind(s.location.clone());
+                .push_bind(s.location.clone())
+                .push_bind(s.format.clone())
+                .push_bind(s.size.clone());
         });
 
         let query = query_builder.build();
@@ -109,19 +102,19 @@ pub(crate) async fn add_sources(
     Ok(())
 }
 
-pub(crate) async fn add_parents(
-    sources: &Vec<Parent>,
+pub(crate) async fn add_archive_entries(
+    sources: &Vec<ArchiveEntry>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let dets_chunked = sources.chunks(BIND_LIMIT / 4);
     let mut query_builder =
-        QueryBuilder::new("INSERT INTO parents (`child`, `parent`, `child_path`, `par_type`)");
+        QueryBuilder::new("INSERT OR IGNORE INTO archive_entries (`file_id`, `archive_id`, `file_path`, `archive_type`)");
     for relchunk in dets_chunked {
         query_builder.push_values(relchunk, |mut qb, s| {
-            qb.push_bind(s.child.clone())
-                .push_bind(s.parent.clone())
-                .push_bind(s.child_path.clone())
-                .push_bind(s.par_type.clone());
+            qb.push_bind(s.file_id.clone())
+                .push_bind(s.archive_id.clone())
+                .push_bind(s.file_path.clone())
+                .push_bind(s.archive_type.clone());
         });
 
         let query = query_builder.build();
@@ -134,10 +127,10 @@ pub async fn get_hash_ids(
     hashes: &Vec<SHA256Checksum>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<
-    HashMap<SHA256Checksum, i64, std::hash::BuildHasherDefault<hash_hasher::HashHasher>>,
+    Vec<(SHA256Checksum, i64)>,
     sqlx::Error,
 > {
-    let mut hmap: HashedMap<SHA256Checksum, i64> = HashedMap::default();
+    let mut h_vec: Vec<(SHA256Checksum, i64)> = Vec::with_capacity(hashes.len());
     let hashes_chunked = hashes.chunks(BIND_LIMIT);
     let mut existing_hashes_qb = QueryBuilder::new("SELECT id, val FROM hashes WHERE (val) in ");
     for hash_chunk in hashes_chunked {
@@ -150,18 +143,18 @@ pub async fn get_hash_ids(
         for res in rows {
             let id = res.id;
             let cs = res.val;
-            hmap.insert(cs, id);
+            h_vec.push((cs, id));
         }
         existing_hashes_qb.reset();
     }
-    Ok(hmap)
+    Ok(h_vec)
 }
 
 pub async fn get_sources_from_hash(
     hash: &SHA256Checksum,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<Vec<Source>, sqlx::Error> {
-    let result = sqlx::query_as!(Source, r#"SELECT sources.h_id, sources.path, sources.location as "location: _", sources.size from sources, hashes WHERE sources.h_id = hashes.id AND hashes.val = ?"#, hash.0)
+    let result = sqlx::query_as!(Source, r#"SELECT sources.h_id, sources.path, sources.location as "location: _", sources.format as "format: _", sources.size from sources, hashes WHERE sources.h_id = hashes.id AND hashes.val = ?"#, hash.0)
     .fetch_all(tx)
     .await;
 
@@ -205,7 +198,7 @@ pub async fn get_sources_from_id(
     id: i64,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<Vec<Source>, sqlx::Error> {
-    let result = sqlx::query_as!(Source, r#"SELECT sources.h_id, sources.path, sources.location as "location: _", size from sources WHERE sources.h_id = ?"#, id)
+    let result = sqlx::query_as!(Source, r#"SELECT sources.h_id, sources.path, sources.location as "location: _", sources.format as "format: _", size from sources WHERE sources.h_id = ?"#, id)
     .fetch_all(tx)
     .await;
 
@@ -236,22 +229,17 @@ pub async fn get_sources_from_ids(
 pub async fn get_parents_from_ids(
     ids: &Vec<i64>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
-) -> Result<HashMap<i64, Vec<(i64, String, EntryType)>>, sqlx::Error> {
-    let mut parents: HashMap<i64, Vec<(i64, String, EntryType)>> = HashMap::new();
+) -> Result<Vec<ArchiveEntry>, sqlx::Error> {
+    let mut parents = Vec::<ArchiveEntry>::with_capacity(ids.len()); // Guess at least one parent per entry.
     let ids_chunked = ids.chunks(BIND_LIMIT);
     let mut query_builder = QueryBuilder::new("SELECT * FROM parents WHERE (child) in ");
     for id_chunk in ids_chunked {
         query_builder.push_tuples(id_chunk, |mut qb, id| {
             qb.push_bind(id);
         });
-        let query = query_builder.build_query_as::<Parent>();
+        let query = query_builder.build_query_as::<ArchiveEntry>();
         let rows = query.fetch_all(&mut *tx).await?;
-        for parent in rows {
-            parents
-                .entry(parent.parent)
-                .or_insert(Vec::new())
-                .push((parent.child, parent.child_path, parent.par_type).clone())
-        }
+        parents.extend(rows);
         query_builder.reset();
     }
     Ok(parents)
@@ -263,7 +251,7 @@ pub async fn get_hashes_from_ids(
 ) -> Result<Vec<Hash>, sqlx::Error> {
     let mut hashes = Vec::<Hash>::new();
     let ids_chunked = ids.chunks(BIND_LIMIT);
-    let mut query_builder = QueryBuilder::new("SELECT id, val, size FROM hashes WHERE (id) in ");
+    let mut query_builder = QueryBuilder::new("SELECT id, val FROM hashes WHERE (id) in ");
     for hash_chunk in ids_chunked {
         query_builder.push_tuples(hash_chunk, |mut qb, hash| {
             qb.push_bind(hash);

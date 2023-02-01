@@ -39,7 +39,7 @@ This should automatically:
 + Build executable and embed frontend 
 + Run a debug version that will open in the browser.
 
-Currently there's no button to trigger the API request to get the list of mods on FSNebula. Manually accessing `http://localhost:4000/api/fsn/mods/update` (link [here](http://localhost:4000/api/fsn/mods/update)) once the server is running will initiate getting the list. This command will take a while to return, and the page will load with the message `updated` once the modlist has been processed.
+Currently there's no button to trigger the API request to get the list of mods on FSNebula. Manually accessing `http://localhost:4000/api/fsn/update` (link [here](http://localhost:4000/api/fsn/mods/update)) once the server is running will initiate getting the list. This command will take a while to return, and the page will load with the message `updated` once the modlist has been processed.
 
 ## Development
 ### Backend 

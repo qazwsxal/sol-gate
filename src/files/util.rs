@@ -2,9 +2,8 @@ use hex::encode;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    common::{SHA256Checksum, Source, SourceLocation},
-    config::{self, Config},
-    SolGateState,
+    common::{SHA256Checksum, SourceLocation},
+    config::Config,
 };
 
 #[derive(Debug, thiserror::Error)]

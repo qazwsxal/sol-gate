@@ -50,10 +50,22 @@ use crate::common::Source;
 /// but in real terms this scales with O(2^n),
 /// making most mods intractable.
 /// Instead, we use an off-the-shelf linear programming solver with the following method:
-/// 1. Ignore the integer constraint and solve the linear problem (linear relaxation)
-/// 2. Incrementally add constraints to fix non-integer results.
 ///
-/// this is known as the *branch and bound* method.
+/// 1. Ignore the integer constraint and solve the linear problem (linear relaxation)
+/// 2. Add constraint to fix non-integer result.
+/// 3. See if partial solution is better than our best fully integer-constrained solution.
+/// 4. If not, stop exploring that constraint, if so, continue adding constraints and checking.
+/// 5. Repeat until all branches are exhausted.
+///
+/// This is known as the *branch and bound* method. If we consider just "branching"
+/// i.e. splitting our solution space up by fixing constraints to (0, 1) and exploring the tree,
+/// then we're just doing an exhaustive search of every possible solution.
+/// The "bounding" phase allows us to massively optimise this problem.
+/// The value of the objective function for the partial solution is a lower bound
+/// to *any* solution using the constraints of the partial solution.
+/// If this lower bound is greater than our best solution,
+/// then we know that all solutions using the constraints we've applied will be worse,
+/// so we can skip exploring *any* solution that uses these constraints.
 pub fn solve_files(sources: HashMap<Source, Vec<i64>>) -> Vec<Source> {
     // Based off of the TSP example from minilp:
     // https://github.com/ztlpn/minilp/blob/master/examples/tsp.rs
@@ -62,8 +74,8 @@ pub fn solve_files(sources: HashMap<Source, Vec<i64>>) -> Vec<Source> {
     // We're probably going to be faster than this because:
     // 1. we're usually dealing with less variables, it's 1 variable per source for us.
     // 2. we don't have to check for subtours and add constraints preventing them.
-    // In fact, without these added subtour constraints,
-    // the TSP problem runs in <0.1s, but who knows how much use that is as a benchmark.
+    // In fact, without these added subtour constraints, the TSP problem runs in <0.1s,
+    // But who knows how much use that is as a benchmark.
 
     // this will be heavily commented as it's quite a complex process.
 
