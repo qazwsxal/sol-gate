@@ -106,13 +106,14 @@ pub enum SourceLocation {
     // Ordering of these enum variants is used for preferential sorting.
     Temp, // Temporary file. These are more likely to be stored on an SSD, so we should prefer reading from them.
     Local,
+    Unmanaged, // Local Directories we shouldn't control, i.e. FS2 retail, knossos etc.
     SolGate,
     FSN,
 }
 
 impl SourceLocation {
     pub fn is_local(&self) -> bool {
-        *self == SourceLocation::Local || *self == SourceLocation::Temp
+        *self == SourceLocation::Local || *self == SourceLocation::Temp || *self == SourceLocation::Unmanaged
     }
 }
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
@@ -146,6 +147,7 @@ pub struct Mod {
     pub banner: Option<String>,
     pub notes: Option<String>,
     pub cmdline: String,
+    pub installed: bool,
 }
 
 // Just the basics for dependency resolution.
@@ -185,8 +187,8 @@ pub struct ModFlags {
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, sqlx::Type, sqlx::FromRow)]
 pub struct Package {
-    pub rel_id: i64,
     pub p_id: i64,
+    pub rel_id: i64,
     pub name: String,
     pub notes: String,
     pub status: DepType,

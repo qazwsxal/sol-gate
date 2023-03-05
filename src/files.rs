@@ -60,7 +60,7 @@ pub struct VPEntry {
     pub hash: SHA256Checksum,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum DataPath {
     Raw(PathBuf),
     VPEntry(PathBuf, String),
@@ -140,7 +140,7 @@ pub async fn acquire_files(
         let s = state.clone();
         async move { fetch_files(&source, &s).await.unwrap() }
     }))
-    .buffer_unordered(4) // TODO Replace 4 with parallel download count.
+    .buffer_unordered(4) // TODO Replace 4 with parallel download count from config.
     .then(|loc| async {
         match loc {
             FetchResult::Directory(dir) => {
@@ -156,7 +156,7 @@ pub async fn acquire_files(
     while let Some(result) = tasks.next().await {
         result?
     }
-    
+
     todo!()
 }
 

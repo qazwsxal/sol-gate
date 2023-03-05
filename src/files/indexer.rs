@@ -1,14 +1,20 @@
 use std::{ffi::OsStr, path::Path};
 
+use bytes::Bytes;
 use futures::stream::{self, StreamExt};
 use hash_hasher::HashedMap;
+use tokio::sync::mpsc;
 use vp::fs::async_index;
 use walkdir::WalkDir;
 
-use super::{hash::hash_channel, DataPath};
+use super::{
+    hash::hash_channel,
+    readers::{Get, GetRequest, ReaderError},
+    DataPath,
+};
 use crate::{
     common::{
-        queries::{add_hashes, add_sources, get_hash_ids, add_archive_entries},
+        queries::{add_archive_entries, add_hashes, add_sources, get_hash_ids},
         Archive, ArchiveEntry, Source, SourceFormat,
     },
     db::SourceLocation,
@@ -35,7 +41,11 @@ impl From<std::io::Error> for IndexError {
     }
 }
 
-pub async fn index_dir(dir: impl AsRef<Path>, state: SolGateState, location: SourceLocation) -> Result<(), IndexError> {
+pub async fn index_dir(
+    dir: impl AsRef<Path>,
+    state: SolGateState,
+    location: SourceLocation,
+) -> Result<(), IndexError> {
     let files = WalkDir::new(dir)
         .into_iter()
         .filter_map(|file| file.ok())
@@ -64,7 +74,17 @@ pub async fn index_file(
 ) -> Result<(), IndexError> {
     let path = filepath.as_ref().to_path_buf();
     let dp = DataPath::Raw(path.clone());
-    let hash_rx = state.reader_pool.write().await.get(dp).await;
+    let (hash_tx, hash_rx) = mpsc::channel::<Result<Bytes, ReaderError>>(5);
+    state
+        .reader_pool
+        .tx
+        .send(GetRequest {
+            contents: Get::Path(dp),
+            channel: hash_tx,
+            queue: true,
+        })
+        .await
+        .expect("Send failed, but it's infallible???");
     // We're reading from disk here, so spawn as a seperate task
     let hash_jh = tokio::spawn(async move { hash_channel(hash_rx).await });
     // TODO: Find hash_id and commit.
@@ -126,8 +146,18 @@ pub async fn index_vp(
     let mut hashes = Vec::with_capacity(vp_entries.len());
     for vp_entry in vp_entries {
         let dp = DataPath::VPEntry(path.clone(), vp_entry.name);
-        let file_rx = state.reader_pool.write().await.get(dp).await;
-        let hash = hash_channel(file_rx).await;
+        let (hash_tx, hash_rx) = mpsc::channel::<Result<Bytes, ReaderError>>(5);
+        state
+            .reader_pool
+            .tx
+            .send(GetRequest {
+                contents: Get::Path(dp),
+                channel: hash_tx,
+                queue: true,
+            })
+            .await
+            .expect("Send failed, but it's infallible???");
+        let hash = hash_channel(hash_rx).await;
         hashes.push(hash)
     }
     let mut sql_tx = state.sql_pool.begin().await.unwrap();

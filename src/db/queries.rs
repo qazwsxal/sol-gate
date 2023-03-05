@@ -4,9 +4,14 @@ use std::{
 };
 
 use hash_hasher::HashedMap;
-use sqlx::{query_builder::QueryBuilder, sqlite::SqliteQueryResult, Transaction};
+use sqlx::{
+    query_builder::QueryBuilder, sqlite::SqliteQueryResult, types::chrono::NaiveDate, Transaction,
+};
 
-use super::{Archive, ArchiveEntry, File, Hash, LinkType, Rel, SHA256Checksum, Source, BIND_LIMIT};
+use super::{
+    Archive, ArchiveEntry, DepType, File, Hash, LinkType, Mod, Package, Rel, SHA256Checksum,
+    Source, BIND_LIMIT,
+};
 
 pub(crate) async fn add_release_names(
     names: &Vec<String>,
@@ -65,7 +70,8 @@ pub(crate) async fn add_files(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let files_chunked = files.chunks(BIND_LIMIT / 3);
-    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO files (`p_id`, `h_id`, `filepath`)");
+    let mut query_builder =
+        QueryBuilder::new("INSERT OR IGNORE INTO files (`p_id`, `h_id`, `filepath`)");
     for file_chunk in files_chunked {
         query_builder.push_values(file_chunk, |mut qb, f| {
             qb.push_bind(f.p_id.clone())
@@ -85,7 +91,9 @@ pub(crate) async fn add_sources(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let dets_chunked = sources.chunks(BIND_LIMIT / 5);
-    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO sources (`h_id`, `path`, `location`, `format`, `size`)");
+    let mut query_builder = QueryBuilder::new(
+        "INSERT OR IGNORE INTO sources (`h_id`, `path`, `location`, `format`, `size`)",
+    );
     for relchunk in dets_chunked {
         query_builder.push_values(relchunk, |mut qb, s| {
             qb.push_bind(s.h_id.clone())
@@ -126,10 +134,7 @@ pub(crate) async fn add_archive_entries(
 pub async fn get_hash_ids(
     hashes: &Vec<SHA256Checksum>,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
-) -> Result<
-    Vec<(SHA256Checksum, i64)>,
-    sqlx::Error,
-> {
+) -> Result<Vec<(SHA256Checksum, i64)>, sqlx::Error> {
     let mut h_vec: Vec<(SHA256Checksum, i64)> = Vec::with_capacity(hashes.len());
     let hashes_chunked = hashes.chunks(BIND_LIMIT);
     let mut existing_hashes_qb = QueryBuilder::new("SELECT id, val FROM hashes WHERE (val) in ");
@@ -150,6 +155,17 @@ pub async fn get_hash_ids(
     Ok(h_vec)
 }
 
+pub async fn get_id_from_hash(
+    hash: &SHA256Checksum,
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
+) -> Result<i64, sqlx::Error> {
+    struct Id{id:i64}
+    let result = sqlx::query_as!(Id, r#"SELECT hashes.id from hashes WHERE hashes.val = ?"#, hash)
+    .fetch_one(tx)
+    .await;
+
+    result.map(|id| id.id)
+}
 pub async fn get_sources_from_hash(
     hash: &SHA256Checksum,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
@@ -232,7 +248,7 @@ pub async fn get_parents_from_ids(
 ) -> Result<Vec<ArchiveEntry>, sqlx::Error> {
     let mut parents = Vec::<ArchiveEntry>::with_capacity(ids.len()); // Guess at least one parent per entry.
     let ids_chunked = ids.chunks(BIND_LIMIT);
-    let mut query_builder = QueryBuilder::new("SELECT * FROM parents WHERE (child) in ");
+    let mut query_builder = QueryBuilder::new("SELECT * FROM archive_entries WHERE (file_id) in ");
     for id_chunk in ids_chunked {
         query_builder.push_tuples(id_chunk, |mut qb, id| {
             qb.push_bind(id);
@@ -272,4 +288,75 @@ pub async fn get_releases(
         .await?;
 
     Ok(HashSet::<Rel>::from_iter(existing_releases.into_iter()))
+}
+
+pub async fn get_mod_details(
+    id: &str,
+    version: &str,
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
+) -> Result<Option<Mod>, sqlx::Error> {
+    sqlx::query_as!(
+        Mod,
+        r#"WITH test AS (
+        SELECT
+          releases.`rel_id`
+        FROM
+          releases
+        WHERE
+          releases.name = ?
+          AND releases.version = ?
+      )
+      SELECT
+        releases.name, releases.version, mods.title, releases.date as "date: NaiveDate",  releases.private as "private: bool", mods.parent, mods.description, mods.logo, mods.tile, mods.banner, mods.notes, mods.cmdline, mods.installed as "installed: bool"
+      FROM
+        mods, test
+      INNER JOIN 
+        releases ON releases.rel_id = mods.rel_id
+      WHERE
+        mods.rel_id = test.rel_id;
+      "#,
+        id,
+        version
+    )
+    .fetch_optional(tx)
+    .await
+}
+
+pub async fn get_mod_packages(
+    id: &str,
+    version: &str,
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
+) -> Result<Vec<Package>, sqlx::Error> {
+    sqlx::query_as!(
+        Package,
+        r#"WITH test AS (
+        SELECT
+          `rel_id`
+        FROM
+          releases
+        WHERE
+          releases.name = ?
+          AND releases.version = ?
+      )
+      SELECT
+        p_id, packages.rel_id, name, notes, status as "status: DepType", environment, folder, is_vp as "is_vp: bool"
+      from
+        packages, test
+      WHERE
+        packages.rel_id = test.rel_id;
+      "#,
+        id,
+        version
+    )
+    .fetch_all(tx)
+    .await
+}
+
+pub async fn get_package_files(
+    package_id: &i64,
+    tx: &mut Transaction<'_, sqlx::Sqlite>,
+) -> Result<Vec<File>, sqlx::Error> {
+    sqlx::query_as!(File, "SELECT * from files where files.p_id = ?", package_id)
+        .fetch_all(tx)
+        .await
 }

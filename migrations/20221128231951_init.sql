@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS mods (
     -- release_thread
     -- videos
     `notes` TEXT,
-    `cmdline` TEXT NOT NULL 
+    `cmdline` TEXT NOT NULL ,
     -- mod_flag
     -- packages
+    `installed` INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS builds (
@@ -61,8 +62,8 @@ CREATE TABLE IF NOT EXISTS packages (
     notes TEXT NOT NULL,
     `status` TEXT NOT NULL,
     environment TEXT,
-    folder TEXT,
-    is_vp INTEGER
+    folder TEXT NOT NULL,
+    is_vp INTEGER NOT NULL
 );
 
 -- Dependencies for each package (mod)
@@ -83,7 +84,7 @@ CREATE TABLE IF NOT EXISTS dep_details (
 -- Big table of every hash ever seen, local or otherwise.
 -- These are unique sha256 identifiers of a file's contents.
 CREATE TABLE IF NOT EXISTS hashes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     val BLOB NOT NULL UNIQUE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS hash_index ON hashes(val);

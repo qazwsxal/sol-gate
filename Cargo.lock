@@ -2021,6 +2021,7 @@ dependencies = [
  "num_cpus",
  "open",
  "platform-dirs",
+ "rand",
  "reqwest",
  "serde",
  "serde_json",

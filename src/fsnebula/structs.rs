@@ -36,7 +36,7 @@ pub struct FSNMod {
     pub packages: Vec<FSNPackage>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FSNPackage {
     pub name: String,
     pub notes: String,
@@ -50,7 +50,7 @@ pub struct FSNPackage {
     pub filelist: Vec<FSNModFile>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FSNRelType {
     Engine,
@@ -58,20 +58,20 @@ pub enum FSNRelType {
     TC,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FSNDependency {
     pub id: String,
     pub version: Option<String>,
     pub packages: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FSNExecutable {
     pub file: String,
     pub label: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FSNZipFile {
     pub filename: String,
     pub dest: String,
@@ -80,7 +80,7 @@ pub struct FSNZipFile {
     pub urls: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct FSNModFile {
     pub filename: String,
     pub archive: String,

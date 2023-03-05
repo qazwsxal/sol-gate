@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 
 use crate::{
     config::{self, Config, FSNPaths},
-    db, files, fsnebula, router, SolGateState,
+    db, files, fsnebula, mods, SolGateState,
 };
 use include_dir::{include_dir, Dir};
 
@@ -28,7 +28,7 @@ pub(crate) async fn make_api(sol_state: SolGateState) -> Router {
     // let txsend = Arc::new(async move {|| tx.send(());});
 
     let fsn_router = fsnebula::api::router(&appdir).await.unwrap();
-    let mods_router = router::router(appdir.clone()).await.unwrap();
+    let mods_router = mods::api::router().await.unwrap();
     // let files_router = files::api::router(sol_state.config.read().await.clone())
     //     .await
     //     .unwrap();

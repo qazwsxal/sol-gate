@@ -1,7 +1,7 @@
 use axum::{self};
 use clap::Parser;
 use config::Config;
-use files::readers::ReaderPool;
+use files::readers::ReaderPoolHandle;
 use open;
 use reqwest::Client;
 use std::collections::HashMap;
@@ -22,7 +22,7 @@ mod config;
 mod db;
 mod files;
 mod fsnebula;
-mod router;
+mod mods;
 
 #[derive(Debug, Clone)]
 pub struct ReaderEntry {
@@ -34,7 +34,7 @@ pub struct ReaderEntry {
 pub struct SolGateState {
     pub sql_pool: sqlx::sqlite::SqlitePool,
     pub config: Arc<RwLock<config::Config>>,
-    pub reader_pool: Arc<RwLock<ReaderPool>>,
+    pub reader_pool: ReaderPoolHandle,
     pub http_client: Client,
 }
 
@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
     });
     // open::that("http://127.0.0.1:4000/")?;
-    open::that("http://127.0.0.1:4000/api/fsn/update")?; // Testing FSN update mechanism
+    open::that("http://127.0.0.1:4000/")?; // Testing FSN update mechanism
     let (_result,) = tokio::join!(server);
     Ok(())
 }
@@ -80,13 +80,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn init_state(config: Config) -> Result<SolGateState, Box<dyn std::error::Error>> {
     let appdir = Config::default_dir();
 
-    let sql_pool = db::init(appdir.clone().join("mods.db"))
-        .await
-        .expect("Could not init sql connection");
+    let sql_pool = db::init(appdir.clone().join("mods.db")).await?;
 
     let rwl_config = Arc::new(RwLock::new(config));
 
-    let reader_pool = Arc::new(RwLock::new(ReaderPool::new()));
+    let reader_pool = ReaderPoolHandle::new(
+        sql_pool.acquire().await?,
+    );
     let http_client = Client::new();
     Ok(SolGateState {
         sql_pool,

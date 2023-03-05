@@ -37,6 +37,9 @@ pub fn get_urls(
         SourceLocation::Temp => Err(UrlError::LocationError(
             "Local sources don't need URLs!".to_string(),
         )),
+        SourceLocation::Unmanaged => Err(UrlError::LocationError(
+            "Local sources don't need URLs!".to_string(),
+        )),
         SourceLocation::FSN => {
             let hashpath = split_hash(checksum);
             let repos = &config.fsnebula.repos;

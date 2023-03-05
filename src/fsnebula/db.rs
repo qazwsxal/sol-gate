@@ -2,7 +2,7 @@ use super::structs::FSNRelType;
 use crate::db;
 use crate::fsnebula::structs::{FSNDependency, FSNMod, FSNPackage};
 use db::queries::get_hash_ids;
-use hash_hasher::{HashedSet, HashedMap};
+use hash_hasher::{HashedMap, HashedSet};
 use sqlx::Sqlite;
 use sqlx::{query_builder::QueryBuilder, sqlite::SqliteQueryResult, Row, Transaction};
 use std::{
@@ -24,6 +24,7 @@ pub(crate) async fn commit_mods(
 
     db::queries::add_release_names(&names, &mut tx).await?;
 
+    // TODO split out build packages
     let rel_ids: Vec<i64> = add_fsn_releases(&fsnmods, &mut tx).await?;
 
     let zipped_vals = zip(rel_ids, fsnmods)
@@ -36,10 +37,9 @@ pub(crate) async fn commit_mods(
 
     let packages = zipped_vals
         .iter()
-        .flat_map(|(i, m)| m.packages.iter().map(|p| (i.clone(), p.clone())))
+        .flat_map(|(rel_id, m)| m.packages.iter().map(|p| (rel_id.clone(), p.clone())))
         .collect::<Vec<(i64, FSNPackage)>>();
     let pak_ids: Vec<i64> = add_fsn_packages(&packages, &mut tx).await?;
-
     let dependencies = zip(pak_ids, &packages)
         .flat_map(|(i, (_, m))| m.dependencies.clone().into_iter().map(move |p| (i, p)))
         .collect::<Vec<(i64, FSNDependency)>>();
@@ -75,7 +75,7 @@ pub(crate) async fn commit_mods(
     let mut files: Vec<db::File> = vec![];
     let mut sources: Vec<db::Source> = vec![];
     let mut parents: Vec<db::ArchiveEntry> = vec![];
-    for (p_id, package) in packages {
+    for (p_id, package) in packages.clone() {
         // first need to specify map of archives a file can be in.
         let mut archive_map = HashMap::<String, i64>::new();
         for archive in package.files {
@@ -218,8 +218,8 @@ async fn add_fsn_mod(
 ) -> Result<SqliteQueryResult, sqlx::Error> {
     sqlx::query!(
         "INSERT OR IGNORE INTO mods \
-        (`rel_id`, `title`, `parent`, `description`, `logo`, `tile`, `banner`, `notes`, `cmdline`)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ",
+        (`rel_id`, `title`, `parent`, `description`, `logo`, `tile`, `banner`, `notes`, `cmdline`, `installed`)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0) ",
         rel_id,
         fsnmod.title,
         fsnmod.parent,
@@ -285,7 +285,7 @@ pub(crate) async fn add_fsn_packages(
                 .push_bind(p.notes.clone())
                 .push_bind(p.status.clone())
                 .push_bind(p.environment.clone())
-                .push_bind(p.folder.clone())
+                .push_bind(p.folder.clone().unwrap_or(".".into())) // FSNPackages can live in the "root" directory.
                 .push_bind(p.is_vp.clone());
         });
         query_builder.push("RETURNING p_id");
@@ -337,7 +337,8 @@ async fn add_fsn_dep_details(
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), sqlx::Error> {
     let dets_chunked = details.chunks(db::BIND_LIMIT / 2);
-    let mut query_builder = QueryBuilder::new("INSERT OR IGNORE INTO dep_details (`dep_id`, `name`)");
+    let mut query_builder =
+        QueryBuilder::new("INSERT OR IGNORE INTO dep_details (`dep_id`, `name`)");
     for relchunk in dets_chunked {
         query_builder.push_values(relchunk, |mut qb, (pak_id, p)| {
             qb.push_bind(pak_id).push_bind(p.clone());
