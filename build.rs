@@ -2,8 +2,8 @@ use std::{env, process::Command};
 
 fn main() {
     // Tell Cargo that if the frontend changes, to rerun this build script.
-    println!("cargo:rerun-if-changed=frontend/public");
     println!("cargo:rerun-if-changed=frontend/src");
+    println!("cargo:rerun-if-changed=frontend/static");
     println!("cargo:rerun-if-changed=frontend/package.json");
 
     // specific weirdness on windows, need workaround

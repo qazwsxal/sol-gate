@@ -46,9 +46,9 @@ Currently there's no button to trigger the API request to get the list of mods o
 Development of backend is as can be expected, edit code and see if it works etc.
 
 ### Frontend 
-Thankfully you don't need to know Rust for this! sol-gate's frontend is a react app that can be developed and iterated on as any other.
+Thankfully you don't need to know Rust for this! sol-gate's frontend is a SvelteKit app that can be developed and iterated on as any other.
 
-You can use the `react-scripts` dev server to speed up iteration.
+You can use the npm dev server to speed up iteration.
 In one terminal run:
 ```shell
 cargo run
@@ -56,9 +56,9 @@ cargo run
 This will launch a sol-gate instance on `localhost:4000`. We can't edit the frontend of this instance, but we can proxy requests to it's backend.
 In another terminal, cd into the `frontend` directory and run:
 ```shell
-npm start
+npm run dev
 ```
-The npm development web server will boot up and open a page at `localhost:3000`. The page will will automatically reload when frontend files are saved. API requests are proxied to the running sol-gate instance. 
+The npm development web server will boot up and open a page at `localhost:XXXX`. The page will will automatically reload when frontend files are saved. API requests are proxied to the running sol-gate instance. 
 
 Any changes made to frontend code should be picked up by `cargo run` and/or `cargo build`. This will automatically recomple the frontend for deployment and embed the updated version in the new executable.
 
