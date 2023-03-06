@@ -1,0 +1,22 @@
+:root {
+    --bg-color: #333;
+    --color: #ddd;
+  }
+  
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, segoe ui, Roboto,
+      helvetica neue, Arial, noto sans, sans-serif, apple color emoji,
+      segoe ui emoji, segoe ui symbol, noto color emoji;
+    background-color: var(--bg-color);
+    color: var(--color);
+  }
+  
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  
+  input, textarea {
+    background-color: transparent;
+  }

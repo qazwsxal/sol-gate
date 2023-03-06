@@ -84,7 +84,7 @@ async fn installed_list(State(pool): State<SqlitePool>) -> Result<Json<Vec<Simpl
 async fn mod_info(
     Path(id): Path<String>,
     State(pool): State<SqlitePool>,
-) -> Result<Json<Vec<SimpleMod>>, String> {
+) -> Result<Json<SimpleMod>, String> {
     let mut tx = pool.begin().await.map_err(|x| x.to_string())?;
     let mods = sqlx::query_as!(
         SimpleMod,
@@ -95,7 +95,7 @@ async fn mod_info(
         ",
         id
     )
-    .fetch_all(&mut tx)
+    .fetch_one(&mut tx)
     .await
     .map_err(|x| x.to_string())?;
     Ok(Json(mods))
