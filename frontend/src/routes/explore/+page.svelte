@@ -18,3 +18,13 @@
 <ModTile mod_id={mod.id}/>
 {/each}
 </div>
+
+
+<style>
+    .modtiles {
+	display: flex;
+	flex-wrap: wrap;
+	overflow: auto;
+	justify-content: space-around;
+    }
+  </style>

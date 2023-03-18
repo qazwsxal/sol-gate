@@ -13,15 +13,21 @@
 
 <style>
 	.app {
-		height: 100%;
+		height: 100vh;
 		display: flex;
 		flex-direction: column;
+		flex-grow: 1;
+		overflow: auto;
 	}
-	.nav, .foot {
+	.nav,
+	.foot {
 		flex: 0 0 auto;
 	}
 	.page {
-		flex: 1;
+		align-items: center;
+		display: flex;
 		overflow: auto;
+		flex-direction: column;
+		flex: 1;
 	}
 </style>

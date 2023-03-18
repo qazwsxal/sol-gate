@@ -1,6 +1,7 @@
 :root {
     --bg-color: #333;
     --color: #ddd;
+    --muted: #444;
   }
   
   body {
@@ -13,10 +14,23 @@
   }
   
   .page {
-    max-width: 960px;
     margin: 0 auto;
   }
   
   input, textarea {
     background-color: transparent;
   }
+
+::-webkit-scrollbar {
+    width: 12px;
+}
+
+::-webkit-scrollbar-track {
+    border-radius: 8px;
+    background-color: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    background-color: var(--muted);
+}
