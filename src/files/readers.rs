@@ -1,18 +1,14 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 use crate::db;
 use db::queries;
-use db::{Archive, SHA256Checksum};
 use futures::StreamExt;
 use sqlx::pool::PoolConnection;
 use sqlx::Acquire;
-use vp::{
-    self,
-    types::VPFile,
-};
+use vp::{self, types::VPFile};
 
 use super::DataPath;
 use bytes::Bytes;
@@ -20,7 +16,9 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 
+use crate::common::{Archive, SHA256Checksum};
 use rand::seq::SliceRandom;
+
 #[derive(Debug)]
 pub enum Get {
     CS(SHA256Checksum),
@@ -293,7 +291,7 @@ impl VPReadActor {
 }
 
 // We keep this as a seperate function - it could be a method on ReaderPoolActor,
-// but the ownership model can trip new coders up as it needs (mut self) not (&mut self). 
+// but the ownership model can trip new coders up as it needs (mut self) not (&mut self).
 // see Alice Rhyl's material on Actors in Tokio.
 async fn run_vp_reader(mut vp_reader: VPReadActor) {
     use tokio::time::{timeout, Duration};
@@ -303,7 +301,7 @@ async fn run_vp_reader(mut vp_reader: VPReadActor) {
         match msg {
             VPRequestMsg::Exit() => break, // We've been told to quit, so do so.
             _ => (),
-        } 
+        }
         vp_reader.handle_msg(msg).await
     }
 }

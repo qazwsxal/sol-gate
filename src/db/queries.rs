@@ -3,15 +3,13 @@ use std::{
     ops::Deref,
 };
 
+use crate::common::{Archive, ArchiveEntry, File, Hash, Mod, Package, SHA256Checksum, Source};
 use hash_hasher::HashedMap;
 use sqlx::{
     query_builder::QueryBuilder, sqlite::SqliteQueryResult, types::chrono::NaiveDate, Transaction,
 };
 
-use super::{
-    Archive, ArchiveEntry, DepType, File, Hash, LinkType, Mod, Package, Rel, SHA256Checksum,
-    Source, BIND_LIMIT,
-};
+use super::{DepType, LinkType, Rel, BIND_LIMIT};
 
 pub(crate) async fn add_release_names(
     names: &Vec<String>,
@@ -159,8 +157,14 @@ pub async fn get_id_from_hash(
     hash: &SHA256Checksum,
     tx: &mut Transaction<'_, sqlx::Sqlite>,
 ) -> Result<i64, sqlx::Error> {
-    struct Id{id:i64}
-    let result = sqlx::query_as!(Id, r#"SELECT hashes.id from hashes WHERE hashes.val = ?"#, hash)
+    struct Id {
+        id: i64,
+    }
+    let result = sqlx::query_as!(
+        Id,
+        r#"SELECT hashes.id from hashes WHERE hashes.val = ?"#,
+        hash
+    )
     .fetch_one(tx)
     .await;
 

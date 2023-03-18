@@ -11,9 +11,9 @@ use axum::{
 
 use sqlx::SqlitePool;
 
+use crate::common::{Mod, Package, Release};
 use crate::{
-    common::queries::{get_mod_details, get_mod_packages, get_package_files},
-    db::{queries, Package},
+    db::queries::{self, get_mod_details, get_mod_packages, get_package_files},
     files::install_files,
     SolGateState,
 };
@@ -110,7 +110,7 @@ async fn install_mod(
         .await?
         .ok_or(ModError::InstallError)?;
     let packages = get_mod_packages(&mod_info.id, &mod_info.version, &mut tx).await?;
-    let mut package_details: Vec<(Package, Vec<crate::db::File>)> = Vec::new();
+    let mut package_details: Vec<(Package, Vec<crate::common::File>)> = Vec::new();
     for package in packages.into_iter() {
         let files = get_package_files(&package.p_id, &mut tx).await?;
         package_details.push((package, files))

@@ -3,12 +3,12 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 use crate::{db, SolGateState};
-use db::{queries::*, Archive, SourceFormat};
-use db::{Mod, SHA256Checksum, Source};
+use db::queries::*;
 use itertools::Itertools;
 use reqwest::Client;
 use tokio::task::JoinError;
 
+use crate::common::{Archive, Mod, SHA256Checksum, Source, SourceFormat};
 use futures::stream::{self, FuturesUnordered, Stream, StreamExt};
 use tokio::fs::{DirBuilder, File};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt, AsyncWrite, AsyncWriteExt};

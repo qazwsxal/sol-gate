@@ -14,14 +14,15 @@ use axum::{
     Json, Router,
 };
 
+use crate::common::{Archive, SHA256Checksum};
 use futures::Stream;
 use tokio::fs::File;
 use tokio::io::AsyncRead;
 use tokio_util::io::ReaderStream;
 
-use crate::common::queries::get_sources_from_hash;
-use crate::common::{Archive, SHA256Checksum, SourceLocation};
 use crate::config::Config;
+use crate::db::queries::get_sources_from_hash;
+use crate::db::SourceLocation;
 use crate::SolGateState;
 pub async fn router(config: Config) -> Result<(Router<SolGateState>), Box<dyn Error>> {
     // let app = Router::new().route("/:b1/:b2/:bx", get(get_file));

@@ -84,9 +84,7 @@ async fn init_state(config: Config) -> Result<SolGateState, Box<dyn std::error::
 
     let rwl_config = Arc::new(RwLock::new(config));
 
-    let reader_pool = ReaderPoolHandle::new(
-        sql_pool.acquire().await?,
-    );
+    let reader_pool = ReaderPoolHandle::new(sql_pool.acquire().await?);
     let http_client = Client::new();
     Ok(SolGateState {
         sql_pool,

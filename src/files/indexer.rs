@@ -12,12 +12,12 @@ use super::{
     readers::{Get, GetRequest, ReaderError},
     DataPath,
 };
+use crate::common::{Archive, ArchiveEntry, Source, SourceFormat};
 use crate::{
-    common::{
+    db::{
         queries::{add_archive_entries, add_hashes, add_sources, get_hash_ids},
-        Archive, ArchiveEntry, Source, SourceFormat,
+        SourceLocation,
     },
-    db::SourceLocation,
     SolGateState,
 };
 

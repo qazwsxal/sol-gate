@@ -1,10 +1,8 @@
 use hex::encode;
 use std::path::{Path, PathBuf};
 
-use crate::{
-    common::{SHA256Checksum, SourceLocation},
-    config::Config,
-};
+use crate::common::SHA256Checksum;
+use crate::{config::Config, db::SourceLocation};
 
 #[derive(Debug, thiserror::Error)]
 pub enum UrlError {

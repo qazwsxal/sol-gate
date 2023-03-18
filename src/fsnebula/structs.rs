@@ -1,9 +1,11 @@
+use crate::common;
+use crate::common::SHA256Checksum;
 use hex;
 use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;
 
-use crate::{common::SHA256Checksum, db};
+use crate::db::{self};
 
 #[derive(Deserialize, Serialize, Debug, Default, PartialEq)]
 pub struct Repo {
@@ -16,7 +18,7 @@ pub struct FSNMod {
     pub title: String,
     pub version: String,
     pub private: bool,
-    pub stability: Option<db::Stability>,
+    pub stability: Option<common::Stability>,
     pub parent: Option<String>,
     pub description: String,
     pub logo: Option<String>,

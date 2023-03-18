@@ -1,6 +1,6 @@
 use super::structs::FSNRelType;
-use crate::db;
 use crate::fsnebula::structs::{FSNDependency, FSNMod, FSNPackage};
+use crate::{common, db};
 use db::queries::get_hash_ids;
 use hash_hasher::{HashedMap, HashedSet};
 use sqlx::Sqlite;
@@ -52,7 +52,7 @@ pub(crate) async fn commit_mods(
 
     // Handle files and hashes!
     // Generate list of hashes
-    let mut hashes: HashedSet<db::SHA256Checksum> = HashedSet::from_iter(
+    let mut hashes: HashedSet<common::SHA256Checksum> = HashedSet::from_iter(
         packages
             .iter()
             .flat_map(|(_, p)| p.filelist.iter().map(|f| f.checksum.clone())),
@@ -63,7 +63,7 @@ pub(crate) async fn commit_mods(
             .flat_map(|(_, p)| p.files.iter().map(|f| f.checksum.clone())),
     );
 
-    let hashvec = hashes.into_iter().collect::<Vec<db::SHA256Checksum>>();
+    let hashvec = hashes.into_iter().collect::<Vec<common::SHA256Checksum>>();
     db::queries::add_hashes(&hashvec, &mut tx).await?;
     let hmap = HashedMap::from_iter(get_hash_ids(&hashvec, &mut tx).await?);
     // Now we have ids for all the hashes we've inserted.
@@ -72,9 +72,9 @@ pub(crate) async fn commit_mods(
     // the parent table (which archives a file can be found in)
     // and the sources table (where to get the archives)
 
-    let mut files: Vec<db::File> = vec![];
-    let mut sources: Vec<db::Source> = vec![];
-    let mut parents: Vec<db::ArchiveEntry> = vec![];
+    let mut files: Vec<common::File> = vec![];
+    let mut sources: Vec<common::Source> = vec![];
+    let mut parents: Vec<common::ArchiveEntry> = vec![];
     for (p_id, package) in packages.clone() {
         // first need to specify map of archives a file can be in.
         let mut archive_map = HashMap::<String, i64>::new();
@@ -82,25 +82,25 @@ pub(crate) async fn commit_mods(
             archive_map.insert(archive.filename, *hmap.get(&archive.checksum).unwrap());
             // While we're at it, add each archive as a source.
             for url in archive.urls {
-                sources.push(db::Source {
+                sources.push(common::Source {
                     h_id: hmap.get(&archive.checksum).unwrap().clone(),
                     path: url,
                     location: db::SourceLocation::FSN,
                     size: archive.filesize,
-                    format: db::SourceFormat::SevenZip,
+                    format: common::SourceFormat::SevenZip,
                 });
             }
         }
         // Now we add each file to our tables, we know parents too.
         for file in package.filelist {
             let h_id = hmap.get(&file.checksum).unwrap().clone();
-            parents.push(db::ArchiveEntry {
+            parents.push(common::ArchiveEntry {
                 file_id: h_id,
                 archive_id: archive_map.get(&file.archive).unwrap().clone(),
                 file_path: file.orig_name, // Path inside archive.
-                archive_type: db::Archive::SevenZip,
+                archive_type: common::Archive::SevenZip,
             });
-            files.push(db::File {
+            files.push(common::File {
                 p_id,
                 h_id,
                 filepath: file.filename,
